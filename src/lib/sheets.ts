@@ -1,11 +1,26 @@
 import { google } from "googleapis";
+import type { CreditResult } from "@/types";
+import { PACK_VALIDITY_MONTHS } from "@/constants";
 
+// ─── Column indices (0-based) — change here if sheet schema changes ───────────
+const COL = {
+  email: 0,
+  name: 1,
+  credits: 2,
+  packLabel: 3,
+  expiresAt: 4,
+  lastUpdated: 5,
+} as const;
+
+const SHEET_RANGE = "Alumnos!A2:F";
 const SHEET_ID = process.env.GOOGLE_SHEET_ID!;
 
-// Columnas en Google Sheet:
-// A: email | B: name | C: credits | D: pack_purchased | E: expires_at | F: last_updated
+// ─── Singleton auth client (reused across requests in the same process) ───────
+let _sheetsClient: ReturnType<typeof google.sheets> | null = null;
 
 async function getSheets() {
+  if (_sheetsClient) return _sheetsClient;
+
   const auth = new google.auth.GoogleAuth({
     credentials: {
       client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
@@ -13,8 +28,12 @@ async function getSheets() {
     },
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
-  return google.sheets({ version: "v4", auth });
+
+  _sheetsClient = google.sheets({ version: "v4", auth });
+  return _sheetsClient;
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function addMonths(date: Date, months: number): Date {
   const d = new Date(date);
@@ -27,26 +46,30 @@ function isExpired(expiresAt: string): boolean {
   return new Date() > new Date(expiresAt);
 }
 
-export async function getCredits(email: string): Promise<{ credits: number; name: string; expiresAt: string } | null> {
+function rowToEmail(row: string[]): string {
+  return row[COL.email]?.toLowerCase() ?? "";
+}
+
+async function fetchAllRows(): Promise<{ rows: string[][]; sheets: ReturnType<typeof google.sheets> }> {
   const sheets = await getSheets();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: "Alumnos!A2:F",
+    range: SHEET_RANGE,
   });
+  return { rows: (res.data.values as string[][]) ?? [], sheets };
+}
 
-  const rows = res.data.values || [];
-  const row = rows.find((r) => r[0]?.toLowerCase() === email.toLowerCase());
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+export async function getCredits(email: string): Promise<CreditResult | null> {
+  const { rows } = await fetchAllRows();
+  const row = rows.find((r) => rowToEmail(r) === email.toLowerCase());
   if (!row) return null;
 
-  const credits = parseInt(row[2] || "0", 10);
-  const expiresAt = row[4] || "";
+  const expiresAt = row[COL.expiresAt] ?? "";
+  const credits = isExpired(expiresAt) ? 0 : parseInt(row[COL.credits] ?? "0", 10);
 
-  // If pack is expired, treat as 0 credits
-  if (expiresAt && isExpired(expiresAt)) {
-    return { credits: 0, name: row[1] || "", expiresAt };
-  }
-
-  return { credits, name: row[1] || "", expiresAt };
+  return { credits, name: row[COL.name] ?? "", expiresAt };
 }
 
 export async function addOrUpdateStudent(
@@ -55,34 +78,26 @@ export async function addOrUpdateStudent(
   creditsToAdd: number,
   packLabel: string
 ): Promise<void> {
-  const sheets = await getSheets();
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: SHEET_ID,
-    range: "Alumnos!A2:F",
-  });
-
-  const rows = res.data.values || [];
-  const rowIndex = rows.findIndex((r) => r[0]?.toLowerCase() === email.toLowerCase());
+  const { rows, sheets } = await fetchAllRows();
+  const rowIndex = rows.findIndex((r) => rowToEmail(r) === email.toLowerCase());
 
   const now = new Date();
-  const expiresAt = addMonths(now, 6).toISOString(); // 6 months from now
+  const expiresAt = addMonths(now, PACK_VALIDITY_MONTHS).toISOString();
   const nowStr = now.toISOString();
 
   if (rowIndex >= 0) {
-    const currentCredits = parseInt(rows[rowIndex][2] || "0", 10);
-    const currentExpires = rows[rowIndex][4] || "";
+    const currentExpires = rows[rowIndex][COL.expiresAt] ?? "";
+    const baseCredits = currentExpires && isExpired(currentExpires)
+      ? 0
+      : parseInt(rows[rowIndex][COL.credits] ?? "0", 10);
 
-    // If existing pack is expired, reset credits; otherwise accumulate
-    const baseCredits = currentExpires && isExpired(currentExpires) ? 0 : currentCredits;
-    const newCredits = baseCredits + creditsToAdd;
-
-    const sheetRow = rowIndex + 2;
+    const sheetRow = rowIndex + 2; // +2: 1-indexed + header row
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
       range: `Alumnos!A${sheetRow}:F${sheetRow}`,
       valueInputOption: "RAW",
       requestBody: {
-        values: [[email, name, newCredits, packLabel, expiresAt, nowStr]],
+        values: [[email, name, baseCredits + creditsToAdd, packLabel, expiresAt, nowStr]],
       },
     });
   } else {
@@ -97,21 +112,18 @@ export async function addOrUpdateStudent(
   }
 }
 
-export async function decrementCredit(email: string): Promise<{ ok: boolean; remaining: number }> {
-  const sheets = await getSheets();
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: SHEET_ID,
-    range: "Alumnos!A2:F",
-  });
+export async function decrementCredit(
+  email: string
+): Promise<{ ok: boolean; remaining: number }> {
+  const { rows, sheets } = await fetchAllRows();
+  const rowIndex = rows.findIndex((r) => rowToEmail(r) === email.toLowerCase());
 
-  const rows = res.data.values || [];
-  const rowIndex = rows.findIndex((r) => r[0]?.toLowerCase() === email.toLowerCase());
   if (rowIndex < 0) return { ok: false, remaining: 0 };
 
-  const expiresAt = rows[rowIndex][4] || "";
+  const expiresAt = rows[rowIndex][COL.expiresAt] ?? "";
   if (expiresAt && isExpired(expiresAt)) return { ok: false, remaining: 0 };
 
-  const currentCredits = parseInt(rows[rowIndex][2] || "0", 10);
+  const currentCredits = parseInt(rows[rowIndex][COL.credits] ?? "0", 10);
   if (currentCredits <= 0) return { ok: false, remaining: 0 };
 
   const newCredits = currentCredits - 1;
@@ -123,11 +135,11 @@ export async function decrementCredit(email: string): Promise<{ ok: boolean; rem
     valueInputOption: "RAW",
     requestBody: {
       values: [[
-        rows[rowIndex][0],
-        rows[rowIndex][1],
+        rows[rowIndex][COL.email],
+        rows[rowIndex][COL.name],
         newCredits,
-        rows[rowIndex][3],
-        rows[rowIndex][4],
+        rows[rowIndex][COL.packLabel],
+        rows[rowIndex][COL.expiresAt],
         new Date().toISOString(),
       ]],
     },

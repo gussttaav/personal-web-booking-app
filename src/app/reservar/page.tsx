@@ -2,22 +2,27 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { Button, Alert, Spinner } from "@/components/ui";
+import { COLORS } from "@/constants";
+import { api, ApiError } from "@/lib/api-client";
 
 function BookingContent() {
   const params = useSearchParams();
   const router = useRouter();
 
-  const email = params.get("email") || "";
-  const name = params.get("name") || "";
-  const [credits, setCredits] = useState(parseInt(params.get("credits") || "0", 10));
+  const email = params.get("email") ?? "";
+  const name = params.get("name") ?? "";
+  const [credits, setCredits] = useState(parseInt(params.get("credits") ?? "0", 10));
   const [booking, setBooking] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState("");
 
-  const CALENDAR_ID = process.env.NEXT_PUBLIC_GOOGLE_CALENDAR_ID || "";
+  const CALENDAR_ID = process.env.NEXT_PUBLIC_GOOGLE_CALENDAR_ID ?? "";
+  const calendarEmbedUrl = `https://calendar.google.com/calendar/appointments/schedules/${CALENDAR_ID}?gv=true`;
 
+  // Guard: redirect if no email
   useEffect(() => {
-    if (!email) router.push("/");
+    if (!email) router.replace("/");
   }, [email, router]);
 
   async function confirmBooking() {
@@ -25,98 +30,103 @@ function BookingContent() {
     setBooking(true);
     setError("");
     try {
-      const res = await fetch("/api/book", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-      if (data.ok) { setCredits(data.remaining); setConfirmed(true); }
-      else setError(data.error || "Error al confirmar la reserva.");
-    } catch { setError("Error de conexión."); }
-    finally { setBooking(false); }
+      const data = await api.book.post(email);
+      setCredits(data.remaining);
+      setConfirmed(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Error de conexión.");
+    } finally {
+      setBooking(false);
+    }
   }
-
-  const calendarEmbedUrl = `https://calendar.google.com/calendar/appointments/schedules/${CALENDAR_ID}?gv=true`;
 
   if (!email) return null;
 
   return (
-    <main className="min-h-screen" style={{ backgroundColor: "#0f1117" }}>
+    <main className="min-h-screen" style={{ backgroundColor: COLORS.background }}>
       {/* Header */}
-      <header className="border-b py-5 px-4" style={{ backgroundColor: "#161b27", borderColor: "#1e2535" }}>
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div>
+      <header
+        className="border-b py-4 sm:py-5 px-4"
+        style={{ backgroundColor: COLORS.surface, borderColor: COLORS.border }}
+      >
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
+          <div className="min-w-0">
             <h1 className="text-xl font-bold text-white">Reservar clase</h1>
-            <p className="text-sm" style={{ color: "#8b95a8" }}>Hola, {name} · {email}</p>
+            <p className="text-sm truncate" style={{ color: COLORS.textSecondary }}>
+              Hola, {name} · {email}
+            </p>
           </div>
-          <div className="text-right">
-            <p className="text-2xl font-bold" style={{ color: "#18d26e" }}>{credits}</p>
-            <p className="text-xs" style={{ color: "#8b95a8" }}>clase{credits !== 1 ? "s" : ""} disponible{credits !== 1 ? "s" : ""}</p>
+          <div className="text-right flex-shrink-0">
+            <p className="text-2xl font-bold" style={{ color: COLORS.brand }}>
+              {credits}
+            </p>
+            <p className="text-xs" style={{ color: COLORS.textSecondary }}>
+              clase{credits !== 1 ? "s" : ""} disponible{credits !== 1 ? "s" : ""}
+            </p>
           </div>
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
-
+      <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 space-y-6">
         {credits === 0 && (
-          <div className="rounded-xl p-4 text-center" style={{ backgroundColor: "#1e1a0f", border: "1px solid #3d2f00" }}>
-            <p className="font-medium" style={{ color: "#fbbf24" }}>No tienes clases disponibles.</p>
-            <a
-              href="/"
-              className="inline-block mt-3 text-sm font-semibold px-5 py-2 rounded-xl text-white transition-all"
-              style={{ backgroundColor: "#18d26e" }}
-            >
+          <Alert variant="warning">
+            <p className="font-medium">No tienes clases disponibles.</p>
+            <a href="/" className="inline-block mt-3 text-sm font-semibold underline">
               Comprar otro pack
             </a>
-          </div>
+          </Alert>
         )}
 
         {confirmed && (
-          <div className="rounded-xl p-4 text-center" style={{ backgroundColor: "#0d1f14", border: "1px solid #18d26e44" }}>
-            <p className="font-semibold text-lg" style={{ color: "#18d26e" }}>✓ ¡Clase confirmada!</p>
-            <p className="text-sm mt-1" style={{ color: "#8b95a8" }}>
-              Te quedan <strong className="text-white">{credits}</strong> clase{credits !== 1 ? "s" : ""}.
+          <Alert variant="success">
+            <p className="font-semibold text-lg">✓ ¡Clase confirmada!</p>
+            <p className="text-sm mt-1" style={{ color: COLORS.textSecondary }}>
+              Te quedan <strong className="text-white">{credits}</strong> clase
+              {credits !== 1 ? "s" : ""}.
             </p>
-          </div>
+          </Alert>
         )}
 
-        {error && (
-          <div className="rounded-xl p-4 text-center" style={{ backgroundColor: "#1f0d0d", border: "1px solid #f8717144" }}>
-            <p style={{ color: "#f87171" }}>{error}</p>
-          </div>
-        )}
+        {error && <Alert variant="error">{error}</Alert>}
 
         {credits > 0 && (
-          <div className="rounded-2xl p-6" style={{ backgroundColor: "#161b27", border: "1px solid #1e2535" }}>
+          <div
+            className="rounded-2xl p-5 sm:p-6"
+            style={{ backgroundColor: COLORS.surface, border: `1px solid ${COLORS.border}` }}
+          >
             <h2 className="text-lg font-semibold text-white mb-1">Elige tu horario</h2>
-            <p className="text-sm mb-4" style={{ color: "#8b95a8" }}>
-              Selecciona un hueco en el calendario y luego pulsa <strong className="text-white">"Confirmar reserva"</strong> para descontar una clase.
+            <p className="text-sm mb-4" style={{ color: COLORS.textSecondary }}>
+              Selecciona un hueco en el calendario y pulsa{" "}
+              <strong className="text-white">"Confirmar reserva"</strong> para descontar
+              una clase.
             </p>
 
-            <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #1e2535" }}>
+            <div
+              className="rounded-xl overflow-hidden"
+              style={{ border: `1px solid ${COLORS.border}` }}
+            >
               <iframe
                 src={calendarEmbedUrl}
-                style={{ border: 0, backgroundColor: "#0f1117" }}
+                style={{ border: 0, backgroundColor: COLORS.background }}
                 width="100%"
                 height="600"
-                frameBorder="0"
                 title="Elegir horario"
+                loading="lazy"
               />
             </div>
 
-            <div className="mt-6 text-center">
-              <button
+            <div className="mt-6 text-center space-y-2">
+              <Button
+                variant="primary"
                 onClick={confirmBooking}
+                isLoading={booking}
+                loadingText="Confirmando..."
                 disabled={booking || credits <= 0}
-                className="font-semibold py-3 px-8 rounded-xl text-sm text-white transition-all"
-                style={{ backgroundColor: booking ? "#0f7a40" : "#18d26e" }}
-                onMouseEnter={e => { if (!booking) e.currentTarget.style.backgroundColor = "#15b85e"; }}
-                onMouseLeave={e => { if (!booking) e.currentTarget.style.backgroundColor = "#18d26e"; }}
+                style={{ padding: "0.75rem 2rem" }}
               >
-                {booking ? "Confirmando..." : "Confirmar reserva (−1 crédito)"}
-              </button>
-              <p className="text-xs mt-2" style={{ color: "#4b5563" }}>
+                Confirmar reserva (−1 crédito)
+              </Button>
+              <p className="text-xs" style={{ color: COLORS.textMuted }}>
                 Elige horario en el calendario y luego pulsa este botón.
               </p>
             </div>
@@ -128,5 +138,18 @@ function BookingContent() {
 }
 
 export default function ReservarPage() {
-  return <Suspense><BookingContent /></Suspense>;
+  return (
+    <Suspense
+      fallback={
+        <div
+          className="min-h-screen flex items-center justify-center"
+          style={{ backgroundColor: COLORS.background }}
+        >
+          <Spinner />
+        </div>
+      }
+    >
+      <BookingContent />
+    </Suspense>
+  );
 }

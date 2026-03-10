@@ -3,11 +3,44 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-rgb: 255, 255, 255;
+  --color-brand: #18d26e;
+  --color-brand-hover: #15b85e;
+  --color-surface: #161b27;
+  --color-background: #0f1117;
+  --color-border: #1e2535;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #8b95a8;
+  --color-text-muted: #4b5563;
+  --color-text-body: #c9d1de;
+  --color-error: #f87171;
+  --color-warning: #fbbf24;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: rgb(var(--background-rgb));
+  color: var(--color-text-primary);
+  background-color: var(--color-background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Prevent layout shift on scrollbar appearance */
+html {
+  overflow-y: scroll;
+}
+
+/* Focus visible styles for keyboard navigation */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+/* Smooth scrolling */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }

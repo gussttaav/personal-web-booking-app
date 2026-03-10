@@ -23,20 +23,24 @@ export default function CalComBooking({
   onBookingSuccess,
 }: CalComBookingProps) {
   const [iframeHeight, setIframeHeight] = useState(580);
-  const initialized = useRef(false);
-  const successFired = useRef(false); // prevent double-firing
+  const initializedRef = useRef(false);
+  const successFiredRef = useRef(false);
 
+  // Reset guards when namespace changes (new booking session)
   useEffect(() => {
-    initialized.current = false;
-    successFired.current = false;
+    initializedRef.current = false;
+    successFiredRef.current = false;
   }, [namespace]);
 
   useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
+    if (initializedRef.current) return;
+    initializedRef.current = true;
 
-    (async function () {
+    let mounted = true;
+
+    (async () => {
       const cal = await getCalApi({ namespace });
+      if (!mounted) return;
 
       cal("ui", {
         styles: { branding: { brandColor } },
@@ -47,21 +51,27 @@ export default function CalComBooking({
 
       cal("on", {
         action: "__dimensionChanged",
-        callback: (e: any) => {
+        callback: (e: { detail?: { data?: { iframeHeight?: number } } }) => {
           const height = e?.detail?.data?.iframeHeight;
-          if (height && height > 300) setIframeHeight(height + 16);
+          if (mounted && height && height > 300) {
+            setIframeHeight(height + 16);
+          }
         },
       });
 
       cal("on", {
         action: "bookingSuccessful",
         callback: () => {
-          if (successFired.current) return;
-          successFired.current = true;
+          if (successFiredRef.current || !mounted) return;
+          successFiredRef.current = true;
           onBookingSuccess?.();
         },
       });
     })();
+
+    return () => {
+      mounted = false;
+    };
   }, [namespace, brandColor, theme, onBookingSuccess]);
 
   return (

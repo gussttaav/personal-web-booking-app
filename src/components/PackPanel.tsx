@@ -1,64 +1,122 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Button, Badge } from "@/components/ui";
+import { COLORS, PACK_CONFIG } from "@/constants";
+import type { PackSize } from "@/types";
+
+// ─── JS-based breakpoint hook ─────────────────────────────────────────────────
+// Using matchMedia instead of CSS classes means DevTools device emulation
+// (which resizes the actual viewport) works correctly alongside real devices.
+
+function useIsMobile(breakpoint = 640) {
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia(`(max-width: ${breakpoint - 1}px)`).matches
+      : false
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [breakpoint]);
+
+  return isMobile;
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface PackPanelProps {
-  size: 5 | 10;
-  price: string;
-  perClass: string;
-  savings: string;
-  badge: string;
-  featured?: boolean;
+  size: PackSize;
   isOpen: boolean;
-  anchorRef: React.RefObject<HTMLButtonElement | null>;
+  anchorRef: React.RefObject<HTMLButtonElement>;
   onClose: () => void;
   onBuy: () => void;
 }
 
-export default function PackPanel({
-  size, price, perClass, savings, badge,
-  featured = false, isOpen, anchorRef, onClose, onBuy,
-}: PackPanelProps) {
-  const panelRef = useRef<HTMLDivElement>(null);
+const FEATURES = [
+  { icon: "📅", text: "Reserva cada clase cuando quieras" },
+  { icon: "🗓️", text: "Horarios en tiempo real vía Google Calendar" },
+  { icon: "⏳", text: "Válido 6 meses desde la compra" },
+  { icon: "💳", text: "Pago único con Stripe, sin suscripción" },
+] as const;
 
-  // Close on Escape or outside click
+// ─── Main component ───────────────────────────────────────────────────────────
+
+export default function PackPanel({ size, isOpen, anchorRef, onClose, onBuy }: PackPanelProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const pack = PACK_CONFIG[size];
+  const isMobile = useIsMobile();
+
+  // Outside-click handler (desktop only — mobile uses backdrop tap)
   useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape" && isOpen) onClose(); }
+    if (!isOpen || isMobile) return;
+
     function onOutside(e: MouseEvent) {
+      const target = e.target as Node;
       if (
-        isOpen &&
-        panelRef.current && !panelRef.current.contains(e.target as Node) &&
-        anchorRef.current && !anchorRef.current.contains(e.target as Node)
-      ) onClose();
+        panelRef.current &&
+        !panelRef.current.contains(target) &&
+        anchorRef.current &&
+        !anchorRef.current.contains(target)
+      ) {
+        onClose();
+      }
     }
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("mousedown", onOutside);
+
+    const id = setTimeout(() => window.addEventListener("mousedown", onOutside), 0);
     return () => {
-      window.removeEventListener("keydown", onKey);
+      clearTimeout(id);
       window.removeEventListener("mousedown", onOutside);
     };
-  }, [isOpen, onClose, anchorRef]);
+  }, [isOpen, isMobile, onClose, anchorRef]);
 
-  // Position popup to the left of the anchor button
+  if (!isOpen) return null;
+
+  // ── Mobile: bottom sheet ──
+  if (isMobile) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-end"
+        style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
+        onClick={(e) => e.target === e.currentTarget && onClose()}
+      >
+        <div
+          className="w-full rounded-t-2xl"
+          style={{
+            backgroundColor: COLORS.surface,
+            border: `1px solid ${COLORS.border}`,
+            animation: "slideUp 0.25s cubic-bezier(0.34,1.56,0.64,1)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <PanelContent pack={pack} onClose={onClose} onBuy={onBuy} isMobile />
+        </div>
+
+        <style>{`
+          @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to   { transform: translateY(0); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  // ── Desktop: anchored popup ──
   const getPopupStyle = (): React.CSSProperties => {
-    if (!anchorRef.current) return { top: 0, right: 0 };
+    if (!anchorRef.current) return {};
     const rect = anchorRef.current.getBoundingClientRect();
     return {
       position: "fixed",
       top: rect.top,
-      right: window.innerWidth - rect.left + 8, // 8px gap to the left of button
+      right: window.innerWidth - rect.left + 8,
       zIndex: 9999,
     };
   };
-
-  const features = [
-    { icon: "📅", text: "Reserva cada clase cuando quieras" },
-    { icon: "🗓️", text: "Horarios en tiempo real vía Google Calendar" },
-    { icon: "⏳", text: "Válido 6 meses desde la compra" },
-    { icon: "💳", text: "Pago único con Stripe, sin suscripción" },
-  ];
-
-  if (!isOpen) return null;
 
   return (
     <div
@@ -66,103 +124,145 @@ export default function PackPanel({
       style={{
         ...getPopupStyle(),
         width: "300px",
-        backgroundColor: "#161b27",
-        border: featured ? "1.5px solid #18d26e" : "1px solid #1e2535",
+        backgroundColor: COLORS.surface,
+        border: pack.featured
+          ? `1.5px solid ${COLORS.brand}`
+          : `1px solid ${COLORS.border}`,
         borderRadius: "16px",
-        boxShadow: "0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04)",
-        animation: "popupIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)",
+        boxShadow: "0 24px 64px rgba(0,0,0,0.7)",
+        animation: "packPanelIn 0.2s cubic-bezier(0.34,1.56,0.64,1)",
         transformOrigin: "top right",
         overflow: "hidden",
       }}
     >
-      {/* Arrow pointing right toward the button */}
-      <div style={{
-        position: "absolute",
-        right: "-7px",
-        top: "14px",
-        width: "12px",
-        height: "12px",
-        backgroundColor: featured ? "#18d26e" : "#1e2535",
-        transform: "rotate(45deg)",
-        borderTop: featured ? "1.5px solid #18d26e" : "none",
-        borderRight: featured ? "1.5px solid #18d26e" : "1px solid #1e2535",
-        zIndex: 1,
-      }} />
-      <div style={{
-        position: "absolute",
-        right: "-6px",
-        top: "15px",
-        width: "10px",
-        height: "10px",
-        backgroundColor: "#161b27",
-        transform: "rotate(45deg)",
-        zIndex: 2,
-      }} />
-
-      <div className="p-5 flex flex-col gap-4">
-        {/* Badge row */}
-        <div className="flex items-center justify-between">
-          <span
-            className="text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full"
-            style={{ color: "#18d26e", backgroundColor: "#18d26e15", border: "1px solid #18d26e33" }}
-          >
-            {badge}
-          </span>
-          {featured && (
-            <span className="text-xs font-semibold" style={{ color: "#fbbf24" }}>✦ Más popular</span>
-          )}
-        </div>
-
-        {/* Price */}
-        <div>
-          <div className="flex items-end gap-2">
-            <span className="text-3xl font-bold text-white">{price}</span>
-            <span className="text-xs mb-1" style={{ color: "#8b95a8" }}>pago único</span>
-          </div>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-sm" style={{ color: "#8b95a8" }}>{size} clases · {perClass}</span>
-            <span
-              className="text-xs font-semibold px-2 py-0.5 rounded-full"
-              style={{ color: "#18d26e", backgroundColor: "#18d26e15" }}
-            >
-              {savings}
-            </span>
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div style={{ borderTop: "1px solid #1e2535" }} />
-
-        {/* Features */}
-        <ul className="space-y-2">
-          {features.map((f) => (
-            <li key={f.text} className="flex items-start gap-2 text-xs">
-              <span className="mt-0.5">{f.icon}</span>
-              <span style={{ color: "#c9d1de" }}>{f.text}</span>
-            </li>
-          ))}
-        </ul>
-
-        {/* CTA */}
-        <button
-          onClick={() => { onClose(); onBuy(); }}
-          className="w-full font-semibold py-3 rounded-xl text-white text-sm transition-all"
-          style={{ backgroundColor: "#18d26e" }}
-          onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#15b85e")}
-          onMouseLeave={e => (e.currentTarget.style.backgroundColor = "#18d26e")}
-        >
-          Comprar Pack {size} — {price}
-        </button>
-
-        <p className="text-xs text-center" style={{ color: "#4b5563" }}>🔒 Pago seguro con Stripe</p>
-      </div>
+      <Arrow featured={pack.featured} />
+      <PanelContent pack={pack} onClose={onClose} onBuy={onBuy} />
 
       <style>{`
-        @keyframes popupIn {
+        @keyframes packPanelIn {
           from { opacity: 0; transform: scale(0.92) translateX(8px); }
           to   { opacity: 1; transform: scale(1)    translateX(0); }
         }
       `}</style>
+    </div>
+  );
+}
+
+// ─── Arrow decoration (desktop only) ─────────────────────────────────────────
+
+function Arrow({ featured }: { featured?: boolean }) {
+  return (
+    <>
+      <div
+        style={{
+          position: "absolute", right: "-7px", top: "14px",
+          width: "12px", height: "12px",
+          backgroundColor: featured ? COLORS.brand : COLORS.border,
+          transform: "rotate(45deg)",
+          zIndex: 1,
+        }}
+      />
+      <div
+        style={{
+          position: "absolute", right: "-6px", top: "15px",
+          width: "10px", height: "10px",
+          backgroundColor: COLORS.surface,
+          transform: "rotate(45deg)",
+          zIndex: 2,
+        }}
+      />
+    </>
+  );
+}
+
+// ─── Shared panel content ─────────────────────────────────────────────────────
+
+function PanelContent({
+  pack,
+  onClose,
+  onBuy,
+  isMobile = false,
+}: {
+  pack: (typeof PACK_CONFIG)[PackSize];
+  onClose: () => void;
+  onBuy: () => void;
+  isMobile?: boolean;
+}) {
+  return (
+    <div className="p-5 flex flex-col gap-4">
+      {/* Badge row */}
+      <div className="flex items-center justify-between">
+        <Badge>{pack.badge}</Badge>
+        {pack.featured && !isMobile && (
+          <span className="text-xs font-semibold" style={{ color: COLORS.warning }}>
+            ✦ Más popular
+          </span>
+        )}
+        {isMobile && (
+          <div className="flex items-center gap-3">
+            {pack.featured && (
+              <span className="text-xs font-semibold" style={{ color: COLORS.warning }}>
+                ✦ Más popular
+              </span>
+            )}
+            <button
+              onClick={onClose}
+              className="w-7 h-7 rounded-full flex items-center justify-center text-sm"
+              style={{ backgroundColor: COLORS.border, color: COLORS.textSecondary }}
+              aria-label="Cerrar"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Price */}
+      <div>
+        <div className="flex items-end gap-2">
+          <span className="text-3xl font-bold text-white">{pack.price}</span>
+          <span className="text-xs mb-1" style={{ color: COLORS.textSecondary }}>
+            pago único
+          </span>
+        </div>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="text-sm" style={{ color: COLORS.textSecondary }}>
+            {pack.size} clases · {pack.perClass}
+          </span>
+          <span
+            className="text-xs font-semibold px-2 py-0.5 rounded-full"
+            style={{ color: COLORS.brand, backgroundColor: COLORS.brandMuted }}
+          >
+            {pack.savings}
+          </span>
+        </div>
+      </div>
+
+      <div style={{ borderTop: `1px solid ${COLORS.border}` }} />
+
+      {/* Features */}
+      <ul className="space-y-2">
+        {FEATURES.map((f) => (
+          <li key={f.text} className="flex items-start gap-2 text-xs">
+            <span className="mt-0.5" aria-hidden="true">{f.icon}</span>
+            <span style={{ color: COLORS.textBody }}>{f.text}</span>
+          </li>
+        ))}
+      </ul>
+
+      {/* CTA */}
+      <Button
+        variant="primary"
+        fullWidth
+        onClick={() => { onClose(); onBuy(); }}
+        aria-label={`Comprar Pack ${pack.size} clases por ${pack.price}`}
+      >
+        Comprar Pack {pack.size} — {pack.price}
+      </Button>
+
+      <p className="text-xs text-center" style={{ color: COLORS.textMuted }}>
+        🔒 Pago seguro con Stripe
+      </p>
     </div>
   );
 }

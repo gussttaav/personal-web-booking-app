@@ -1,274 +1,195 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, Suspense } from "react";
 import dynamic from "next/dynamic";
+import { useUserSession } from "@/hooks/useUserSession";
+import { usePackPanel } from "@/hooks/usePackPanel";
+import { useStickyButtons } from "@/hooks/useStickyButtons";
 import PackModal from "@/components/PackModal";
 import PackPanel from "@/components/PackPanel";
+import BookingModeView from "@/components/BookingModeView";
+import { Spinner } from "@/components/ui";
+import { COLORS, getCalLink, PACK_CONFIG, PACK_SIZES } from "@/constants";
+import type { PackSize, StudentInfo } from "@/types";
 
 const CalComBooking = dynamic(() => import("@/components/CalComBooking"), {
   ssr: false,
   loading: () => (
-    <div className="flex items-center justify-center" style={{ height: "580px" }}>
-      <div className="text-center space-y-3">
-        <div
-          className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto"
-          style={{ borderColor: "#18d26e", borderTopColor: "transparent" }}
-        />
-        <p className="text-sm" style={{ color: "#8b95a8" }}>Cargando calendario...</p>
-      </div>
+    <div
+      className="flex flex-col items-center justify-center gap-3"
+      style={{ height: "580px" }}
+    >
+      <Spinner />
+      <p className="text-sm" style={{ color: COLORS.textSecondary }}>
+        Cargando calendario...
+      </p>
     </div>
   ),
 });
 
-type ActivePanel = null | 5 | 10;
-interface StudentInfo { email: string; name: string; credits: number; }
+// ─── Derived config ───────────────────────────────────────────────────────────
+
+const CAL_LINK = getCalLink(process.env.NEXT_PUBLIC_CAL_URL);
+const CAL_EVENT_LINK = getCalLink(
+  process.env.NEXT_PUBLIC_CAL_EVENT_SLUG ??
+    `${process.env.NEXT_PUBLIC_CAL_URL ?? "https://cal.com/gustavo-torres"}/pack-1-hora`
+);
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 function HomeContent() {
-  const params = useSearchParams();
-  const [activePanel, setActivePanel]   = useState<ActivePanel>(null);
-  const [selectedPack, setSelectedPack] = useState<5 | 10 | null>(null);
-  const [student, setStudent]           = useState<StudentInfo | null>(null);
+  const { session, startSession, updateCredits, clearSession } = useUserSession();
+  const { activePanel, togglePanel, closePanel, btn5Ref, btn10Ref } = usePackPanel();
+  const { cardRef, isSticky, fixedRight, fixedTop } = useStickyButtons(16);
+  const [selectedPack, setSelectedPack] = useState<PackSize | null>(null);
 
-  // Refs for the two floating buttons — used to anchor the popups
-  const btn5Ref  = useRef<HTMLButtonElement>(null);
-  const btn10Ref = useRef<HTMLButtonElement>(null);
+  const btnRefs: Record<PackSize, React.RefObject<HTMLButtonElement>> = {
+    5: btn5Ref as React.RefObject<HTMLButtonElement>,
+    10: btn10Ref as React.RefObject<HTMLButtonElement>,
+  };
 
-  // Ref to the main block — used to track when it scrolls out of view
-  const blockRef        = useRef<HTMLDivElement>(null);
-  const [isFixed, setIsFixed] = useState(false);
-  // Remember the absolute right offset for when buttons are fixed
-  const [btnRight, setBtnRight] = useState(4);
-
-  const CAL_LINK = (process.env.NEXT_PUBLIC_CAL_URL || "https://cal.com/gustavo-torres")
-    .replace("https://cal.com/", "");
-
-  // Direct event link: bypasses event picker and opens calendar immediately
-  const CAL_EVENT_LINK = (
-    process.env.NEXT_PUBLIC_CAL_EVENT_SLUG ||
-    `${process.env.NEXT_PUBLIC_CAL_URL || "https://cal.com/gustavo-torres"}/pack-1-hora`
-  ).replace("https://cal.com/", "");
-
-  // Enter booking mode automatically when returning from Stripe
-  useEffect(() => {
-    if (params.get("booking") === "1") {
-      const email   = params.get("email")   || "";
-      const name    = params.get("name")    || "";
-      const credits = parseInt(params.get("credits") || "0", 10);
-      if (email && credits > 0) setStudent({ email, name, credits });
-    }
-  }, [params]);
-
-  // Observe when the block's top-right corner goes above the viewport
-  useEffect(() => {
-    function update() {
-      if (!blockRef.current) return;
-      const rect = blockRef.current.getBoundingClientRect();
-      setIsFixed(rect.top + 16 < 0);
-
-      if (!isFixed) {
-        const rightOffset = window.innerWidth - rect.right;
-        setBtnRight(rightOffset+4);   // o +4, +6, lo que te guste
-      }
-    }
-    window.addEventListener("scroll", update, { passive: true });
-    window.addEventListener("resize", update);
-    update();
-    return () => {
-      window.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
-    };
-  }, []);
-
-  function togglePanel(pack: 5 | 10) {
-    setActivePanel((prev) => (prev === pack ? null : pack));
-  }
-
-  function handleCreditsReady(info: StudentInfo) {
+  function handleCreditsReady(student: StudentInfo) {
     setSelectedPack(null);
-    setActivePanel(null);
-    setStudent(info);
+    closePanel();
+    startSession(student);
   }
 
-  const isBookingMode = student !== null;
-
-  // Buttons container: absolute inside block normally, fixed when scrolled past
-  const containerStyle: React.CSSProperties = isFixed
-    ? { position: "fixed", top: "16px", right: `${btnRight - 16}px`, zIndex: 50, display: "flex", flexDirection: "column", gap: "8px" }
-    : { position: "absolute", top: "16px", right: "4px",        zIndex: 20, display: "flex", flexDirection: "column", gap: "8px" };
+  // Button container style: absolute inside card until card scrolls out of
+  // view, then fixed to the viewport at the same right-edge alignment.
+  const buttonContainerStyle: React.CSSProperties = isSticky
+    ? {
+        position: "fixed",
+        top: fixedTop,
+        right: fixedRight,
+        zIndex: 50,
+        display: "flex",
+        flexDirection: "column",
+        gap: "8px",
+      }
+    : {
+        position: "absolute",
+        top: "12px",
+        right: "12px",
+        zIndex: 20,
+        display: "flex",
+        flexDirection: "column",
+        gap: "8px",
+      };
 
   return (
-    <main className="min-h-screen" style={{ backgroundColor: "#0f1117" }}>
-
-      {/* ── HEADER ── */}
-      <header className="border-b py-5 px-4" style={{ backgroundColor: "#161b27", borderColor: "#1e2535" }}>
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Gustavo Torres Guerrero</h1>
-            <p className="text-sm" style={{ color: "#8b95a8" }}>Profesor y consultor independiente</p>
+    <main
+      className="min-h-screen"
+      style={{ backgroundColor: COLORS.background }}
+    >
+      {/* ── Header ── */}
+      <header
+        className="border-b py-4 sm:py-5 px-4"
+        style={{
+          backgroundColor: COLORS.surface,
+          borderColor: COLORS.border,
+        }}
+      >
+        <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-white truncate">
+              Gustavo Torres Guerrero
+            </h1>
+            <p className="text-sm" style={{ color: COLORS.textSecondary }}>
+              Profesor y consultor independiente
+            </p>
           </div>
-          {isBookingMode && student && (
-            <div className="text-right">
-              <p className="text-xs" style={{ color: "#8b95a8" }}>Hola, {student.name}</p>
-              <p className="text-lg font-bold" style={{ color: "#18d26e" }}>
-                {student.credits} clase{student.credits !== 1 ? "s" : ""}
+
+          {session && (
+            <div className="text-right flex-shrink-0">
+              <p className="text-xs truncate max-w-[120px] sm:max-w-none" style={{ color: COLORS.textSecondary }}>
+                Hola, {session.name}
+              </p>
+              <p className="text-lg font-bold" style={{ color: COLORS.brand }}>
+                {session.credits} clase{session.credits !== 1 ? "s" : ""}
               </p>
             </div>
           )}
         </div>
       </header>
 
-      <div className="max-w-3xl mx-auto px-4 py-8">
+      {/* ── Content ── */}
+      <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8">
+        {/* Card — ref tracked for sticky button calculation */}
         <div
-          ref={blockRef}
+          ref={cardRef}
           className="rounded-2xl overflow-visible relative"
-          style={{ backgroundColor: "#161b27", border: "1px solid #1e2535", minHeight: "580px" }}
+          style={{
+            backgroundColor: COLORS.surface,
+            border: `1px solid ${COLORS.border}`,
+            minHeight: "580px",
+          }}
         >
-
-          {/* ═══════════════════════════════════
-              CALENDAR MODE
-          ═══════════════════════════════════ */}
-          {!isBookingMode && (
+          {/* ── Calendar / Browse mode ── */}
+          {!session && (
             <>
-              {/* Floating buttons — absolute or fixed depending on scroll */}
-              <div style={containerStyle}>
-                {/* Botón Pack 5 */}
-                <button
-                  ref={btn5Ref}
-                  onClick={() => togglePanel(5)}
-                  className="group relative flex flex-col items-center justify-center"
-                  style={{
-                    width: "52px",
-                    height: "52px",
-                    borderRadius: "50%",
-                    border: "1.5px solid #18d26e",
-                    backgroundColor: activePanel === 5 ? "rgba(24, 210, 110, 0.12)" : "transparent",
-                    color: "#18d26e",
-                    boxShadow: activePanel === 5 
-                      ? "0 0 20px rgba(24, 210, 110, 0.5), inset 0 0 12px rgba(24, 210, 110, 0.25)"
-                      : "0 3px 12px rgba(0,0,0,0.5), inset 0 1px 2px rgba(24, 210, 110, 0.15)",
-                    transition: "all 0.25s ease",
-                    backdropFilter: "blur(2px)", // opcional – da un toque más premium en fondos oscuros
-                    WebkitBackdropFilter: "blur(2px)",
-                  }}
-                >
-                  <span 
-                    style={{ 
-                      fontSize: "18px", 
-                      fontWeight: 600, 
-                      lineHeight: 1,
-                      letterSpacing: "-0.5px",
-                    }}
-                  >
-                    5h
-                  </span>
-                  <span 
-                    style={{ 
-                      fontSize: "8px", 
-                      fontWeight: 300, 
-                      opacity: 0.80,
-                      marginTop: "2px",
-                    }}
-                  >
-                    €75
-                  </span>
-
-                  {/* Indicador visual de abierto (flecha pequeña o punto) – opcional */}
-                  {activePanel === 5 && (
-                    <div 
-                      className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-[#18d26e] shadow-[0_0_8px_#18d26e]"
+              {/* Pack buttons — absolute inside card normally,
+                  switches to fixed once card top scrolls off screen */}
+              <div style={buttonContainerStyle} aria-label="Packs disponibles">
+                {PACK_SIZES.map((size) => {
+                  const pack = PACK_CONFIG[size];
+                  return (
+                    <PackButton
+                      key={size}
+                      size={size}
+                      pack={pack}
+                      isActive={activePanel === size}
+                      btnRef={btnRefs[size]}
+                      onToggle={() => togglePanel(size)}
                     />
-                  )}
-                </button>
-
-                {/* Botón Pack 10 */}
-                <button
-                  ref={btn10Ref}
-                  onClick={() => togglePanel(10)}
-                  className="group relative flex flex-col items-center justify-center"
-                  style={{
-                    width: "52px",
-                    height: "52px",
-                    borderRadius: "50%",
-                    border: "1.5px solid #18d26e",
-                    backgroundColor: activePanel === 10 ? "rgba(24, 210, 110, 0.12)" : "transparent",
-                    color: "#18d26e",
-                    boxShadow: activePanel === 10 
-                      ? "0 0 20px rgba(24, 210, 110, 0.5), inset 0 0 12px rgba(24, 210, 110, 0.25)"
-                      : "0 3px 12px rgba(0,0,0,0.5), inset 0 1px 2px rgba(24, 210, 110, 0.15)",
-                    transition: "all 0.25s ease",
-                    backdropFilter: "blur(2px)",
-                    WebkitBackdropFilter: "blur(2px)",
-                  }}
-                >
-                  <span 
-                    style={{ 
-                      fontSize: "18px", 
-                      fontWeight: 600, 
-                      lineHeight: 1,
-                      letterSpacing: "-0.5px",
-                    }}
-                  >
-                    10h
-                  </span>
-                  <span 
-                    style={{ 
-                      fontSize: "8px", 
-                      fontWeight: 300, 
-                      opacity: 0.80,
-                      marginTop: "2px",
-                    }}
-                  >
-                    €140
-                  </span>
-
-                  {activePanel === 10 && (
-                    <div 
-                      className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-[#18d26e] shadow-[0_0_8px_#18d26e]"
-                    />
-                  )}
-                </button>
+                  );
+                })}
               </div>
 
-              {/* Calendar */}
-              <div style={{ opacity: activePanel ? 0.35 : 1, transition: "opacity 0.3s ease", pointerEvents: activePanel ? "none" : "auto" }}>
-                <CalComBooking calLink={CAL_LINK} theme="dark" brandColor="#18d26e" />
+              {/* Calendar (dimmed when a panel is open) */}
+              <div
+                style={{
+                  opacity: activePanel ? 0.3 : 1,
+                  transition: "opacity 0.3s ease",
+                  pointerEvents: activePanel ? "none" : "auto",
+                }}
+              >
+                <CalComBooking
+                  calLink={CAL_LINK}
+                  theme="dark"
+                  brandColor={COLORS.brand}
+                />
               </div>
 
-              {/* Popup panels */}
-              <PackPanel
-                size={5} price="€75" perClass="€15/clase" savings="ahorra €5" badge="Popular"
-                isOpen={activePanel === 5}
-                anchorRef={btn5Ref}
-                onClose={() => setActivePanel(null)}
-                onBuy={() => { setActivePanel(null); setSelectedPack(5); }}
-              />
-              <PackPanel
-                size={10} price="€140" perClass="€14/clase" savings="ahorra €20" badge="Mejor precio" featured
-                isOpen={activePanel === 10}
-                anchorRef={btn10Ref}
-                onClose={() => setActivePanel(null)}
-                onBuy={() => { setActivePanel(null); setSelectedPack(10); }}
-              />
+              {/* Pack panels */}
+              {PACK_SIZES.map((size) => (
+                <PackPanel
+                  key={size}
+                  size={size}
+                  isOpen={activePanel === size}
+                  anchorRef={btnRefs[size]}
+                  onClose={closePanel}
+                  onBuy={() => {
+                    closePanel();
+                    setSelectedPack(size);
+                  }}
+                />
+              ))}
             </>
           )}
 
-          {/* ═══════════════════════════════════
-              BOOKING MODE
-          ═══════════════════════════════════ */}
-          {isBookingMode && student && (
+          {/* ── Booking mode ── */}
+          {session && (
             <BookingModeView
-              student={student}
+              student={session}
               calLink={CAL_EVENT_LINK}
-              onCreditsUpdated={(remaining) =>
-                setStudent(remaining > 0 ? { ...student, credits: remaining } : null)
-              }
-              onExit={() => setStudent(null)}
+              onCreditsUpdated={updateCredits}
+              onExit={clearSession}
             />
           )}
         </div>
       </div>
 
+      {/* Pack purchase modal */}
       {selectedPack && (
         <PackModal
           packSize={selectedPack}
@@ -280,207 +201,73 @@ function HomeContent() {
   );
 }
 
-/* ─────────────────────────
-   Booking mode view
-───────────────────────── */
-function BookingModeView({ student, calLink, onCreditsUpdated, onExit }: {
-  student: StudentInfo;
-  calLink: string;
-  onCreditsUpdated: (remaining: number) => void;
-  onExit: () => void;
-}) {
-  // "idle" → calendar shown
-  // "confirming" → API call in progress (brief)
-  // "success" → booking confirmed, show result screen
-  // "error" → something went wrong
-  type Phase = "idle" | "confirming" | "success" | "error";
-  const [phase, setPhase]       = useState<Phase>("idle");
-  const [remaining, setRemaining] = useState(student.credits);
-  const [errMsg, setErrMsg]     = useState("");
+// ─── Pack button ──────────────────────────────────────────────────────────────
 
-  // Called automatically by cal.com bookingSuccessful event
-  async function handleBookingSuccess() {
-    setPhase("confirming");
-    try {
-      const res  = await fetch("/api/book", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: student.email }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setRemaining(data.remaining);
-        setPhase("success");
-        onCreditsUpdated(data.remaining);
-      } else {
-        setErrMsg(data.error || "Error al registrar la reserva.");
-        setPhase("error");
-      }
-    } catch {
-      setErrMsg("Error de conexión al registrar la reserva.");
-      setPhase("error");
-    }
-  }
+interface PackButtonProps {
+  size: PackSize;
+  pack: (typeof PACK_CONFIG)[PackSize];
+  isActive: boolean;
+  btnRef: React.RefObject<HTMLButtonElement>;
+  onToggle: () => void;
+}
 
-  // Book another class: reset to idle with a fresh namespace key
-  const [calKey, setCalKey] = useState(0);
-  function bookAnother() {
-    setPhase("idle");
-    setCalKey(k => k + 1); // forces CalComBooking to remount with fresh state
-  }
-
+function PackButton({ size, pack, isActive, btnRef, onToggle }: PackButtonProps) {
   return (
-    <div className="flex flex-col rounded-2xl overflow-hidden" style={{ minHeight: "580px" }}>
-
-      {/* ── Top bar ── */}
-      <div className="flex items-center justify-between px-5 py-3 border-b" style={{ borderColor: "#1e2535" }}>
-        <span
-          className="text-xs font-bold px-3 py-1 rounded-full"
-          style={{ backgroundColor: "#18d26e18", color: "#18d26e", border: "1px solid #18d26e33" }}
-        >
-          {remaining} clase{remaining !== 1 ? "s" : ""} disponible{remaining !== 1 ? "s" : ""}
-        </span>
-        <button
-          onClick={onExit}
-          className="text-xs transition-colors"
-          style={{ color: "#4b5563" }}
-          onMouseEnter={e => (e.currentTarget.style.color = "#8b95a8")}
-          onMouseLeave={e => (e.currentTarget.style.color = "#4b5563")}
-        >
-          ← Volver al inicio
-        </button>
-      </div>
-
-      {/* ── PHASE: idle — show calendar ── */}
-      {phase === "idle" && (
-        <div className="flex-1">
-          <CalComBooking
-            key={calKey}
-            calLink={calLink}
-            userName={student.name}
-            userEmail={student.email}
-            theme="dark"
-            brandColor="#18d26e"
-            namespace={`booking-${calKey}`}
-            onBookingSuccess={handleBookingSuccess}
-          />
-        </div>
+    <button
+      ref={btnRef}
+      onClick={onToggle}
+      aria-expanded={isActive}
+      aria-haspopup="true"
+      aria-label={`Ver pack ${size} clases — ${pack.price}`}
+      className="relative flex flex-col items-center justify-center transition-all duration-200"
+      style={{
+        width: "52px",
+        height: "52px",
+        borderRadius: "50%",
+        border: `1.5px solid ${COLORS.brand}`,
+        backgroundColor: isActive ? COLORS.brandMuted : "transparent",
+        color: COLORS.brand,
+        boxShadow: isActive
+          ? `0 0 20px rgba(24,210,110,0.5), inset 0 0 12px rgba(24,210,110,0.25)`
+          : `0 3px 12px rgba(0,0,0,0.5)`,
+        backdropFilter: "blur(2px)",
+      }}
+    >
+      <span style={{ fontSize: "18px", fontWeight: 600, lineHeight: 1, letterSpacing: "-0.5px" }}>
+        {size}h
+      </span>
+      <span style={{ fontSize: "8px", fontWeight: 300, opacity: 0.8, marginTop: "2px" }}>
+        {pack.price}
+      </span>
+      {isActive && (
+        <div
+          className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full"
+          style={{
+            backgroundColor: COLORS.brand,
+            boxShadow: `0 0 8px ${COLORS.brand}`,
+          }}
+          aria-hidden="true"
+        />
       )}
-
-      {/* ── PHASE: confirming — brief spinner while API call runs ── */}
-      {phase === "confirming" && (
-        <div className="flex-1 flex items-center justify-center" style={{ minHeight: "400px" }}>
-          <div className="text-center space-y-3">
-            <div
-              className="w-10 h-10 border-2 border-t-transparent rounded-full animate-spin mx-auto"
-              style={{ borderColor: "#18d26e", borderTopColor: "transparent" }}
-            />
-            <p className="text-sm" style={{ color: "#8b95a8" }}>Registrando tu reserva...</p>
-          </div>
-        </div>
-      )}
-
-      {/* ── PHASE: success ── */}
-      {phase === "success" && (
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="text-center space-y-6 max-w-sm w-full">
-            {/* Icon */}
-            <div
-              className="w-16 h-16 rounded-full flex items-center justify-center mx-auto text-2xl"
-              style={{ backgroundColor: "#18d26e22", color: "#18d26e" }}
-            >
-              ✓
-            </div>
-
-            <div>
-              <h3 className="text-xl font-bold text-white">¡Clase reservada!</h3>
-              <p className="mt-1 text-sm" style={{ color: "#8b95a8" }}>
-                Recibirás una confirmación por email.
-              </p>
-            </div>
-
-            {/* Credits left */}
-            <div
-              className="rounded-xl p-4"
-              style={{ backgroundColor: "#0d1f14", border: "1px solid #18d26e33" }}
-            >
-              {remaining > 0 ? (
-                <>
-                  <p className="font-semibold" style={{ color: "#18d26e" }}>
-                    Te quedan {remaining} clase{remaining !== 1 ? "s" : ""}
-                  </p>
-                  <p className="text-xs mt-1" style={{ color: "#8b95a8" }}>
-                    Reserva cuando quieras antes de que caduque tu pack.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="font-semibold" style={{ color: "#fbbf24" }}>
-                    Has usado todas tus clases del pack
-                  </p>
-                  <p className="text-xs mt-1" style={{ color: "#8b95a8" }}>
-                    Puedes comprar otro pack para seguir reservando.
-                  </p>
-                </>
-              )}
-            </div>
-
-            {/* Actions */}
-            <div className="space-y-3">
-              {remaining > 0 && (
-                <button
-                  onClick={bookAnother}
-                  className="w-full font-semibold py-3 rounded-xl text-white text-sm transition-all"
-                  style={{ backgroundColor: "#18d26e" }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#15b85e")}
-                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = "#18d26e")}
-                >
-                  Reservar otra clase
-                </button>
-              )}
-              <button
-                onClick={onExit}
-                className="w-full font-medium py-2.5 rounded-xl text-sm transition-all"
-                style={{ border: "1px solid #1e2535", color: "#8b95a8", backgroundColor: "transparent" }}
-                onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#1e2535")}
-                onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
-              >
-                {remaining > 0 ? "Volver al inicio" : "Comprar otro pack"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── PHASE: error ── */}
-      {phase === "error" && (
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="text-center space-y-4 max-w-sm w-full">
-            <div
-              className="w-14 h-14 rounded-full flex items-center justify-center mx-auto text-xl"
-              style={{ backgroundColor: "#f8717122", color: "#f87171" }}
-            >
-              ✕
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-white">Algo salió mal</h3>
-              <p className="text-sm mt-1" style={{ color: "#8b95a8" }}>{errMsg}</p>
-            </div>
-            <button
-              onClick={() => setPhase("idle")}
-              className="w-full font-semibold py-3 rounded-xl text-white text-sm"
-              style={{ backgroundColor: "#18d26e" }}
-            >
-              Intentar de nuevo
-            </button>
-          </div>
-        </div>
-      )}
-
-    </div>
+    </button>
   );
 }
 
+// ─── Export ───────────────────────────────────────────────────────────────────
+
 export default function HomePage() {
-  return <Suspense><HomeContent /></Suspense>;
+  return (
+    <Suspense
+      fallback={
+        <div
+          className="min-h-screen flex items-center justify-center"
+          style={{ backgroundColor: COLORS.background }}
+        >
+          <Spinner />
+        </div>
+      }
+    >
+      <HomeContent />
+    </Suspense>
+  );
 }

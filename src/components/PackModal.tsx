@@ -1,17 +1,35 @@
 "use client";
 
-import { useState } from "react";
-
-interface StudentInfo {
-  email: string;
-  name: string;
-  credits: number;
-}
+import { useState, useCallback } from "react";
+import { Button, Alert, Card } from "@/components/ui";
+import { COLORS, PACK_CONFIG } from "@/constants";
+import { api, ApiError } from "@/lib/api-client";
+import type { PackSize, StudentInfo } from "@/types";
 
 interface PackModalProps {
-  packSize: 5 | 10;
+  packSize: PackSize;
   onClose: () => void;
+  /** Called when the user already has credits — skip checkout and go straight to booking */
   onCreditsReady?: (student: StudentInfo) => void;
+}
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  backgroundColor: "#0f1117",
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: "12px",
+  padding: "10px 16px",
+  fontSize: "14px",
+  color: "#ffffff",
+  outline: "none",
+  transition: "border-color 0.2s",
+};
+
+function validateForm(name: string, email: string): string | null {
+  if (!name.trim()) return "Por favor, escribe tu nombre.";
+  if (!email.trim()) return "Por favor, escribe tu email.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "El email no es válido.";
+  return null;
 }
 
 export default function PackModal({ packSize, onClose, onCreditsReady }: PackModalProps) {
@@ -20,150 +38,161 @@ export default function PackModal({ packSize, onClose, onCreditsReady }: PackMod
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const price = packSize === 5 ? "€75" : "€140";
+  const pack = PACK_CONFIG[packSize];
 
-  async function handleSubmit() {
-    if (!name.trim() || !email.trim()) { setError("Por favor, rellena tu nombre y email."); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError("El email no es válido."); return; }
+  const handleSubmit = useCallback(async () => {
+    const validationError = validateForm(name, email);
+    if (validationError) { setError(validationError); return; }
 
     setLoading(true);
     setError("");
 
     try {
-      const res = await fetch(`/api/credits?email=${encodeURIComponent(email)}`);
-      const data = await res.json();
+      // Check for existing credits first
+      const creditsData = await api.credits.get(email.trim());
 
-      if (data.credits > 0) {
-        // Already has credits → go directly to booking mode
+      if (creditsData.credits > 0) {
         onClose();
-        onCreditsReady?.({ email, name, credits: data.credits });
+        onCreditsReady?.({ email: email.trim(), name: name.trim(), credits: creditsData.credits });
         return;
       }
 
-      // No credits → Stripe checkout
-      const checkoutRes = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, packSize }),
+      // No credits → go to Stripe
+      const checkoutData = await api.stripe.checkout({
+        name: name.trim(),
+        email: email.trim(),
+        packSize,
       });
-      const checkoutData = await checkoutRes.json();
 
-      if (checkoutData.url) {
-        window.location.href = checkoutData.url;
-      } else {
-        setError("Error al crear la sesión de pago. Inténtalo de nuevo.");
-      }
-    } catch {
-      setError("Error de conexión. Inténtalo de nuevo.");
+      window.location.href = checkoutData.url;
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Error de conexión. Inténtalo de nuevo.");
     } finally {
       setLoading(false);
     }
-  }
+  }, [name, email, packSize, onClose, onCreditsReady]);
 
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    backgroundColor: "#0f1117",
-    border: "1px solid #1e2535",
-    borderRadius: "12px",
-    padding: "10px 16px",
-    fontSize: "14px",
-    color: "#ffffff",
-    outline: "none",
-  };
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") handleSubmit();
+  }
 
   return (
     <div
       className="fixed inset-0 flex items-center justify-center z-50 p-4"
       style={{ backgroundColor: "rgba(0,0,0,0.75)" }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="pack-modal-title"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div
-        className="rounded-2xl shadow-2xl w-full max-w-md p-8"
-        style={{ backgroundColor: "#161b27", border: "1px solid #1e2535" }}
-      >
+      <Card className="w-full max-w-md p-8">
         {/* Header */}
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-4">
             <div
-              className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg"
-              style={{ backgroundColor: "#18d26e22", color: "#18d26e" }}
+              className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg flex-shrink-0"
+              style={{ backgroundColor: COLORS.brandMuted, color: COLORS.brand }}
+              aria-hidden="true"
             >
               G
             </div>
             <div>
-              <p className="text-sm" style={{ color: "#8b95a8" }}>Gustavo Torres Guerrero</p>
-              <h2 className="text-lg font-bold text-white">Pack {packSize} clases</h2>
+              <p className="text-sm" style={{ color: COLORS.textSecondary }}>
+                Gustavo Torres Guerrero
+              </p>
+              <h2 id="pack-modal-title" className="text-lg font-bold text-white">
+                Pack {packSize} clases
+              </h2>
             </div>
           </div>
+
+          {/* Summary */}
           <div className="rounded-xl p-3 text-sm space-y-1" style={{ backgroundColor: "#0f1117" }}>
-            <p style={{ color: "#8b95a8" }}>🕐 {packSize} horas · A reservar individualmente</p>
-            <p style={{ color: "#8b95a8" }}>💳 Pago único de <strong className="text-white">{price}</strong></p>
-            <p style={{ color: "#8b95a8" }}>📅 Válido <strong className="text-white">6 meses</strong> desde la compra</p>
+            <p style={{ color: COLORS.textSecondary }}>
+              🕐 {packSize} horas · A reservar individualmente
+            </p>
+            <p style={{ color: COLORS.textSecondary }}>
+              💳 Pago único de{" "}
+              <strong className="text-white">{pack.price}</strong>
+            </p>
+            <p style={{ color: COLORS.textSecondary }}>
+              📅 Válido{" "}
+              <strong className="text-white">6 meses</strong> desde la compra
+            </p>
           </div>
         </div>
 
         {/* Form */}
+        {/* OAuth2 note: replace this form with an OAuth login button.
+            The onCreditsReady / Stripe flow stays the same. */}
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "#c9d1de" }}>
-              Tu Nombre <span style={{ color: "#18d26e" }}>*</span>
+            <label
+              htmlFor="modal-name"
+              className="block text-sm font-medium mb-1"
+              style={{ color: COLORS.textBody }}
+            >
+              Tu Nombre <span style={{ color: COLORS.brand }} aria-hidden="true">*</span>
             </label>
             <input
+              id="modal-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              onKeyDown={handleKeyDown}
               placeholder="María García"
+              autoComplete="name"
               style={inputStyle}
+              onFocus={(e) => (e.currentTarget.style.borderColor = COLORS.brand)}
+              onBlur={(e) => (e.currentTarget.style.borderColor = COLORS.border)}
             />
           </div>
+
           <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "#c9d1de" }}>
-              Email <span style={{ color: "#18d26e" }}>*</span>
+            <label
+              htmlFor="modal-email"
+              className="block text-sm font-medium mb-1"
+              style={{ color: COLORS.textBody }}
+            >
+              Email <span style={{ color: COLORS.brand }} aria-hidden="true">*</span>
             </label>
             <input
+              id="modal-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              onKeyDown={handleKeyDown}
               placeholder="maria@ejemplo.com"
+              autoComplete="email"
               style={inputStyle}
+              onFocus={(e) => (e.currentTarget.style.borderColor = COLORS.brand)}
+              onBlur={(e) => (e.currentTarget.style.borderColor = COLORS.border)}
             />
           </div>
-          {error && (
-            <p className="text-sm rounded-lg px-3 py-2" style={{ color: "#f87171", backgroundColor: "#f8717115" }}>
-              {error}
-            </p>
-          )}
+
+          {error && <Alert variant="error">{error}</Alert>}
         </div>
 
-        {/* Buttons */}
+        {/* Actions */}
         <div className="flex gap-3 mt-6">
-          <button
-            onClick={onClose}
-            className="flex-1 font-medium py-2.5 rounded-xl text-sm transition-all"
-            style={{ border: "1px solid #1e2535", color: "#8b95a8", backgroundColor: "transparent" }}
-            onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#1e2535")}
-            onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
-          >
+          <Button variant="secondary" onClick={onClose} style={{ flex: 1 }}>
             Atrás
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
             onClick={handleSubmit}
-            disabled={loading}
-            className="flex-1 font-semibold py-2.5 rounded-xl text-sm text-white transition-all"
-            style={{ backgroundColor: loading ? "#0f7a40" : "#18d26e" }}
-            onMouseEnter={e => { if (!loading) e.currentTarget.style.backgroundColor = "#15b85e"; }}
-            onMouseLeave={e => { if (!loading) e.currentTarget.style.backgroundColor = "#18d26e"; }}
+            isLoading={loading}
+            loadingText="Verificando..."
+            style={{ flex: 1 }}
           >
-            {loading ? "Verificando..." : "Continuar"}
-          </button>
+            Continuar
+          </Button>
         </div>
 
-        <p className="text-xs text-center mt-4" style={{ color: "#4b5563" }}>
+        <p className="text-xs text-center mt-4" style={{ color: COLORS.textMuted }}>
           El pago se procesará de forma segura a través de Stripe.
         </p>
-      </div>
+      </Card>
     </div>
   );
 }
