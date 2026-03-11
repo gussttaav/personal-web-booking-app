@@ -1,33 +1,27 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import dynamic from "next/dynamic";
 import { useUserSession } from "@/hooks/useUserSession";
 import { usePackPanel } from "@/hooks/usePackPanel";
 import { useStickyButtons } from "@/hooks/useStickyButtons";
+import SpeedDial from "@/components/SpeedDial";
 import PackModal from "@/components/PackModal";
 import PackPanel from "@/components/PackPanel";
 import BookingModeView from "@/components/BookingModeView";
 import { Spinner } from "@/components/ui";
-import { COLORS, getCalLink, PACK_CONFIG, PACK_SIZES } from "@/constants";
+import { COLORS, getCalLink, PACK_SIZES } from "@/constants";
 import type { PackSize, StudentInfo } from "@/types";
 
 const CalComBooking = dynamic(() => import("@/components/CalComBooking"), {
   ssr: false,
   loading: () => (
-    <div
-      className="flex flex-col items-center justify-center gap-3"
-      style={{ height: "580px" }}
-    >
+    <div className="flex flex-col items-center justify-center gap-3" style={{ height: "580px" }}>
       <Spinner />
-      <p className="text-sm" style={{ color: COLORS.textSecondary }}>
-        Cargando calendario...
-      </p>
+      <p className="text-sm" style={{ color: COLORS.textSecondary }}>Cargando calendario...</p>
     </div>
   ),
 });
-
-// ─── Derived config ───────────────────────────────────────────────────────────
 
 const CAL_LINK = getCalLink(process.env.NEXT_PUBLIC_CAL_URL);
 const CAL_EVENT_LINK = getCalLink(
@@ -39,55 +33,62 @@ const CAL_EVENT_LINK = getCalLink(
 
 function HomeContent() {
   const { session, startSession, updateCredits, clearSession } = useUserSession();
-  const { activePanel, togglePanel, closePanel, btn5Ref, btn10Ref } = usePackPanel();
+  const {
+    dialOpen, activePanel,
+    toggleDial, closeDial,
+    togglePanel, closePanel,
+    btn5Ref, btn10Ref,
+  } = usePackPanel();
   const { cardRef, isSticky, fixedRight, fixedTop } = useStickyButtons(16);
   const [selectedPack, setSelectedPack] = useState<PackSize | null>(null);
 
-  const btnRefs: Record<PackSize, React.RefObject<HTMLButtonElement>> = {
-    5: btn5Ref as React.RefObject<HTMLButtonElement>,
+  // Ref to the SpeedDial container DOM node
+  const dialContainerRef = useRef<HTMLDivElement>(null);
+  // Ref to whichever PackPanel is currently open — populated via onPanelRef callback
+  const activePanelRef = useRef<HTMLDivElement | null>(null);
+
+  const itemRefs: Record<PackSize, React.RefObject<HTMLButtonElement>> = {
+    5:  btn5Ref  as React.RefObject<HTMLButtonElement>,
     10: btn10Ref as React.RefObject<HTMLButtonElement>,
   };
 
+  // ── Single outside-click handler for the whole dial+panel system ──
+  // Uses 'click' (not 'mousedown') so it always fires AFTER button onClick.
+  useEffect(() => {
+    if (!dialOpen) return;
+
+    function onOutside(e: MouseEvent) {
+      const target = e.target as Node;
+      const insideDial   = dialContainerRef.current?.contains(target) ?? false;
+      const insidePanel  = activePanelRef.current?.contains(target) ?? false;
+      if (!insideDial && !insidePanel) {
+        closeDial();
+      }
+    }
+
+    window.addEventListener("click", onOutside);
+    return () => window.removeEventListener("click", onOutside);
+  }, [dialOpen, closeDial]);
+
   function handleCreditsReady(student: StudentInfo) {
+    closeDial();
     setSelectedPack(null);
-    closePanel();
     startSession(student);
   }
 
-  // Button container style: absolute inside card until card scrolls out of
-  // view, then fixed to the viewport at the same right-edge alignment.
-  const buttonContainerStyle: React.CSSProperties = isSticky
-    ? {
-        position: "fixed",
-        top: fixedTop,
-        right: fixedRight,
-        zIndex: 50,
-        display: "flex",
-        flexDirection: "column",
-        gap: "8px",
-      }
-    : {
-        position: "absolute",
-        top: "12px",
-        right: "12px",
-        zIndex: 20,
-        display: "flex",
-        flexDirection: "column",
-        gap: "8px",
-      };
+  const dialContainerStyle: React.CSSProperties = isSticky
+    ? { position: "fixed", top: fixedTop, right: fixedRight, zIndex: 50 }
+    : { position: "absolute", top: "12px", right: "12px", zIndex: 20 };
+
+  const calDimmed = dialOpen || !!activePanel;
 
   return (
-    <main
-      className="min-h-screen"
-      style={{ backgroundColor: COLORS.background }}
-    >
+    <main className="min-h-screen" style={{ backgroundColor: COLORS.background }}>
+
       {/* ── Header ── */}
       <header
         className="border-b py-4 sm:py-5 px-4"
-        style={{
-          backgroundColor: COLORS.surface,
-          borderColor: COLORS.border,
-        }}
+        style={{ backgroundColor: COLORS.surface, borderColor: COLORS.border }}
       >
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
           <div className="min-w-0">
@@ -98,7 +99,6 @@ function HomeContent() {
               Profesor y consultor independiente
             </p>
           </div>
-
           {session && (
             <div className="text-right flex-shrink-0">
               <p className="text-xs truncate max-w-[120px] sm:max-w-none" style={{ color: COLORS.textSecondary }}>
@@ -114,7 +114,6 @@ function HomeContent() {
 
       {/* ── Content ── */}
       <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8">
-        {/* Card — ref tracked for sticky button calculation */}
         <div
           ref={cardRef}
           className="rounded-2xl overflow-visible relative"
@@ -124,60 +123,48 @@ function HomeContent() {
             minHeight: "580px",
           }}
         >
-          {/* ── Calendar / Browse mode ── */}
           {!session && (
             <>
-              {/* Pack buttons — absolute inside card normally,
-                  switches to fixed once card top scrolls off screen */}
-              <div style={buttonContainerStyle} aria-label="Packs disponibles">
-                {PACK_SIZES.map((size) => {
-                  const pack = PACK_CONFIG[size];
-                  return (
-                    <PackButton
-                      key={size}
-                      size={size}
-                      pack={pack}
-                      isActive={activePanel === size}
-                      btnRef={btnRefs[size]}
-                      onToggle={() => togglePanel(size)}
-                    />
-                  );
-                })}
+              {/* Speed dial */}
+              <SpeedDial
+                containerRef={dialContainerRef}
+                isOpen={dialOpen}
+                activePanel={activePanel}
+                itemRefs={itemRefs}
+                onToggleDial={toggleDial}
+                onTogglePanel={togglePanel}
+                onClose={closeDial}
+                containerStyle={dialContainerStyle}
+              />
+
+              {/* Calendar */}
+              <div style={{
+                opacity: calDimmed ? 0.3 : 1,
+                transition: "opacity 0.3s ease",
+                pointerEvents: calDimmed ? "none" : "auto",
+              }}>
+                <CalComBooking calLink={CAL_LINK} theme="dark" brandColor={COLORS.brand} />
               </div>
 
-              {/* Calendar (dimmed when a panel is open) */}
-              <div
-                style={{
-                  opacity: activePanel ? 0.3 : 1,
-                  transition: "opacity 0.3s ease",
-                  pointerEvents: activePanel ? "none" : "auto",
-                }}
-              >
-                <CalComBooking
-                  calLink={CAL_LINK}
-                  theme="dark"
-                  brandColor={COLORS.brand}
-                />
-              </div>
-
-              {/* Pack panels */}
+              {/* Pack detail panels */}
               {PACK_SIZES.map((size) => (
                 <PackPanel
                   key={size}
                   size={size}
                   isOpen={activePanel === size}
-                  anchorRef={btnRefs[size]}
+                  anchorRef={itemRefs[size]}
                   onClose={closePanel}
+                  onPanelRef={(el) => { activePanelRef.current = el; }}
                   onBuy={() => {
-                    closePanel();
                     setSelectedPack(size);
+                    // Defer dial close so it never races with setSelectedPack in the same render
+                    setTimeout(closeDial, 0);
                   }}
                 />
               ))}
             </>
           )}
 
-          {/* ── Booking mode ── */}
           {session && (
             <BookingModeView
               student={session}
@@ -189,7 +176,6 @@ function HomeContent() {
         </div>
       </div>
 
-      {/* Pack purchase modal */}
       {selectedPack && (
         <PackModal
           packSize={selectedPack}
@@ -201,68 +187,11 @@ function HomeContent() {
   );
 }
 
-// ─── Pack button ──────────────────────────────────────────────────────────────
-
-interface PackButtonProps {
-  size: PackSize;
-  pack: (typeof PACK_CONFIG)[PackSize];
-  isActive: boolean;
-  btnRef: React.RefObject<HTMLButtonElement>;
-  onToggle: () => void;
-}
-
-function PackButton({ size, pack, isActive, btnRef, onToggle }: PackButtonProps) {
-  return (
-    <button
-      ref={btnRef}
-      onClick={onToggle}
-      aria-expanded={isActive}
-      aria-haspopup="true"
-      aria-label={`Ver pack ${size} clases — ${pack.price}`}
-      className="relative flex flex-col items-center justify-center transition-all duration-200"
-      style={{
-        width: "52px",
-        height: "52px",
-        borderRadius: "50%",
-        border: `1.5px solid ${COLORS.brand}`,
-        backgroundColor: isActive ? COLORS.brandMuted : "transparent",
-        color: COLORS.brand,
-        boxShadow: isActive
-          ? `0 0 20px rgba(24,210,110,0.5), inset 0 0 12px rgba(24,210,110,0.25)`
-          : `0 3px 12px rgba(0,0,0,0.5)`,
-        backdropFilter: "blur(2px)",
-      }}
-    >
-      <span style={{ fontSize: "18px", fontWeight: 600, lineHeight: 1, letterSpacing: "-0.5px" }}>
-        {size}h
-      </span>
-      <span style={{ fontSize: "8px", fontWeight: 300, opacity: 0.8, marginTop: "2px" }}>
-        {pack.price}
-      </span>
-      {isActive && (
-        <div
-          className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full"
-          style={{
-            backgroundColor: COLORS.brand,
-            boxShadow: `0 0 8px ${COLORS.brand}`,
-          }}
-          aria-hidden="true"
-        />
-      )}
-    </button>
-  );
-}
-
-// ─── Export ───────────────────────────────────────────────────────────────────
-
 export default function HomePage() {
   return (
     <Suspense
       fallback={
-        <div
-          className="min-h-screen flex items-center justify-center"
-          style={{ backgroundColor: COLORS.background }}
-        >
+        <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: COLORS.background }}>
           <Spinner />
         </div>
       }

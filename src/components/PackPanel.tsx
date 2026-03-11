@@ -1,13 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Button, Badge } from "@/components/ui";
 import { COLORS, PACK_CONFIG } from "@/constants";
 import type { PackSize } from "@/types";
 
-// ─── JS-based breakpoint hook ─────────────────────────────────────────────────
-// Using matchMedia instead of CSS classes means DevTools device emulation
-// (which resizes the actual viewport) works correctly alongside real devices.
+// ─── JS-based mobile detection ────────────────────────────────────────────────
 
 function useIsMobile(breakpoint = 640) {
   const [isMobile, setIsMobile] = useState(() =>
@@ -15,7 +13,6 @@ function useIsMobile(breakpoint = 640) {
       ? window.matchMedia(`(max-width: ${breakpoint - 1}px)`).matches
       : false
   );
-
   useEffect(() => {
     const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
     setIsMobile(mq.matches);
@@ -23,7 +20,6 @@ function useIsMobile(breakpoint = 640) {
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
   }, [breakpoint]);
-
   return isMobile;
 }
 
@@ -35,6 +31,8 @@ interface PackPanelProps {
   anchorRef: React.RefObject<HTMLButtonElement>;
   onClose: () => void;
   onBuy: () => void;
+  /** Called with the panel's root DOM node so the parent can manage outside-clicks */
+  onPanelRef?: (el: HTMLDivElement | null) => void;
 }
 
 const FEATURES = [
@@ -46,33 +44,18 @@ const FEATURES = [
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function PackPanel({ size, isOpen, anchorRef, onClose, onBuy }: PackPanelProps) {
+export default function PackPanel({
+  size, isOpen, anchorRef, onClose, onBuy, onPanelRef,
+}: PackPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const pack = PACK_CONFIG[size];
   const isMobile = useIsMobile();
 
-  // Outside-click handler (desktop only — mobile uses backdrop tap)
+  // Report the panel DOM node to parent whenever it mounts/unmounts
   useEffect(() => {
-    if (!isOpen || isMobile) return;
-
-    function onOutside(e: MouseEvent) {
-      const target = e.target as Node;
-      if (
-        panelRef.current &&
-        !panelRef.current.contains(target) &&
-        anchorRef.current &&
-        !anchorRef.current.contains(target)
-      ) {
-        onClose();
-      }
-    }
-
-    const id = setTimeout(() => window.addEventListener("mousedown", onOutside), 0);
-    return () => {
-      clearTimeout(id);
-      window.removeEventListener("mousedown", onOutside);
-    };
-  }, [isOpen, isMobile, onClose, anchorRef]);
+    onPanelRef?.(panelRef.current);
+    return () => onPanelRef?.(null);
+  });
 
   if (!isOpen) return null;
 
@@ -85,6 +68,7 @@ export default function PackPanel({ size, isOpen, anchorRef, onClose, onBuy }: P
         onClick={(e) => e.target === e.currentTarget && onClose()}
       >
         <div
+          ref={panelRef}
           className="w-full rounded-t-2xl"
           style={{
             backgroundColor: COLORS.surface,
@@ -95,7 +79,6 @@ export default function PackPanel({ size, isOpen, anchorRef, onClose, onBuy }: P
         >
           <PanelContent pack={pack} onClose={onClose} onBuy={onBuy} isMobile />
         </div>
-
         <style>{`
           @keyframes slideUp {
             from { transform: translateY(100%); }
@@ -106,7 +89,7 @@ export default function PackPanel({ size, isOpen, anchorRef, onClose, onBuy }: P
     );
   }
 
-  // ── Desktop: anchored popup ──
+  // ── Desktop: fixed popup anchored to the item button ──
   const getPopupStyle = (): React.CSSProperties => {
     if (!anchorRef.current) return {};
     const rect = anchorRef.current.getBoundingClientRect();
@@ -137,7 +120,6 @@ export default function PackPanel({ size, isOpen, anchorRef, onClose, onBuy }: P
     >
       <Arrow featured={pack.featured} />
       <PanelContent pack={pack} onClose={onClose} onBuy={onBuy} />
-
       <style>{`
         @keyframes packPanelIn {
           from { opacity: 0; transform: scale(0.92) translateX(8px); }
@@ -148,40 +130,31 @@ export default function PackPanel({ size, isOpen, anchorRef, onClose, onBuy }: P
   );
 }
 
-// ─── Arrow decoration (desktop only) ─────────────────────────────────────────
+// ─── Arrow ────────────────────────────────────────────────────────────────────
 
 function Arrow({ featured }: { featured?: boolean }) {
   return (
     <>
-      <div
-        style={{
-          position: "absolute", right: "-7px", top: "14px",
-          width: "12px", height: "12px",
-          backgroundColor: featured ? COLORS.brand : COLORS.border,
-          transform: "rotate(45deg)",
-          zIndex: 1,
-        }}
-      />
-      <div
-        style={{
-          position: "absolute", right: "-6px", top: "15px",
-          width: "10px", height: "10px",
-          backgroundColor: COLORS.surface,
-          transform: "rotate(45deg)",
-          zIndex: 2,
-        }}
-      />
+      <div style={{
+        position: "absolute", right: "-7px", top: "14px",
+        width: "12px", height: "12px",
+        backgroundColor: featured ? COLORS.brand : COLORS.border,
+        transform: "rotate(45deg)", zIndex: 1,
+      }} />
+      <div style={{
+        position: "absolute", right: "-6px", top: "15px",
+        width: "10px", height: "10px",
+        backgroundColor: COLORS.surface,
+        transform: "rotate(45deg)", zIndex: 2,
+      }} />
     </>
   );
 }
 
-// ─── Shared panel content ─────────────────────────────────────────────────────
+// ─── Panel content ────────────────────────────────────────────────────────────
 
 function PanelContent({
-  pack,
-  onClose,
-  onBuy,
-  isMobile = false,
+  pack, onClose, onBuy, isMobile = false,
 }: {
   pack: (typeof PACK_CONFIG)[PackSize];
   onClose: () => void;
@@ -190,40 +163,30 @@ function PanelContent({
 }) {
   return (
     <div className="p-5 flex flex-col gap-4">
-      {/* Badge row */}
       <div className="flex items-center justify-between">
         <Badge>{pack.badge}</Badge>
         {pack.featured && !isMobile && (
-          <span className="text-xs font-semibold" style={{ color: COLORS.warning }}>
-            ✦ Más popular
-          </span>
+          <span className="text-xs font-semibold" style={{ color: COLORS.warning }}>✦ Más popular</span>
         )}
         {isMobile && (
           <div className="flex items-center gap-3">
             {pack.featured && (
-              <span className="text-xs font-semibold" style={{ color: COLORS.warning }}>
-                ✦ Más popular
-              </span>
+              <span className="text-xs font-semibold" style={{ color: COLORS.warning }}>✦ Más popular</span>
             )}
             <button
               onClick={onClose}
               className="w-7 h-7 rounded-full flex items-center justify-center text-sm"
               style={{ backgroundColor: COLORS.border, color: COLORS.textSecondary }}
               aria-label="Cerrar"
-            >
-              ✕
-            </button>
+            >✕</button>
           </div>
         )}
       </div>
 
-      {/* Price */}
       <div>
         <div className="flex items-end gap-2">
           <span className="text-3xl font-bold text-white">{pack.price}</span>
-          <span className="text-xs mb-1" style={{ color: COLORS.textSecondary }}>
-            pago único
-          </span>
+          <span className="text-xs mb-1" style={{ color: COLORS.textSecondary }}>pago único</span>
         </div>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-sm" style={{ color: COLORS.textSecondary }}>
@@ -240,7 +203,6 @@ function PanelContent({
 
       <div style={{ borderTop: `1px solid ${COLORS.border}` }} />
 
-      {/* Features */}
       <ul className="space-y-2">
         {FEATURES.map((f) => (
           <li key={f.text} className="flex items-start gap-2 text-xs">
@@ -250,11 +212,11 @@ function PanelContent({
         ))}
       </ul>
 
-      {/* CTA */}
+      {/* CTA — onBuy fires first, then onClose */}
       <Button
         variant="primary"
         fullWidth
-        onClick={() => { onClose(); onBuy(); }}
+        onClick={() => onBuy()}
         aria-label={`Comprar Pack ${pack.size} clases por ${pack.price}`}
       >
         Comprar Pack {pack.size} — {pack.price}
