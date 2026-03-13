@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "media.licdn.com" },
+    ],
+  },
+  
   // Security headers
   async headers() {
     return [
@@ -19,9 +25,10 @@ const nextConfig = {
     ];
   },
 
-  // Expose only the env vars that must be public
+  // Only expose env vars that must be public (used in browser-side code).
+  // The cal.com event slugs are hardcoded in constants/index.ts;
+  // NEXT_PUBLIC_CAL_EVENT_SLUG overrides the pack-booking event if set.
   env: {
-    NEXT_PUBLIC_CAL_URL: process.env.NEXT_PUBLIC_CAL_URL,
     NEXT_PUBLIC_CAL_EVENT_SLUG: process.env.NEXT_PUBLIC_CAL_EVENT_SLUG,
   },
 };

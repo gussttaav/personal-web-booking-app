@@ -9,16 +9,17 @@ module.exports = {
     extend: {
       colors: {
         brand: {
-          DEFAULT: "#18d26e",
-          hover: "#15b85e",
-          muted: "rgba(24,210,110,0.12)",
+          DEFAULT: "#3ddc84",
+          hover: "#34c274",
+          muted: "rgba(61,220,132,0.12)",
         },
-        surface: "#161b27",
-        background: "#0f1117",
-        border: "#1e2535",
+        surface: "#141618",
+        background: "#0d0f10",
+        border: "rgba(255,255,255,0.07)",
       },
       fontFamily: {
-        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        sans:  ["var(--font-sans)", "DM Sans", "system-ui", "sans-serif"],
+        serif: ["var(--font-serif)", "DM Serif Display", "serif"],
       },
     },
   },
