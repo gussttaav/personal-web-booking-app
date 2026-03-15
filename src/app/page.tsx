@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useUserSession } from "@/hooks/useUserSession";
 import PackModal from "@/components/PackModal";
 import BookingModeView from "@/components/BookingModeView";
+import Chat from "@/components/Chat";
 import { Spinner, CreditsPill } from "@/components/ui";
 import { COLORS, PACK_CONFIG, PACK_SIZES, CAL_EVENTS } from "@/constants";
 import { SKILL_ITEMS as SKILL_ITEMS_DATA } from "@/constants/skills";
@@ -394,7 +395,7 @@ function HomeContent() {
                 animation: "fadeUp 0.6s ease both 0.05s",
               }}
             >
-              <div style={{ position: "relative", flexShrink: 0 }}>
+              <div style={{ flexShrink: 0 }}>
                 <Image
                   src="https://media.licdn.com/dms/image/v2/D4D03AQF25eZ55kWu3A/profile-displayphoto-shrink_200_200/profile-displayphoto-shrink_200_200/0/1724152255801?e=1775088000&v=beta&t=bN_0ltCp4a-NFtO76NOz-gLodBrBkNq1Urk9jLiMMqY"
                   alt="Gustavo Torres Guerrero"
@@ -406,19 +407,6 @@ function HomeContent() {
                     objectFit: "cover",
                     border: "2px solid var(--border)",
                     display: "block",
-                  }}
-                />
-                <div
-                  aria-hidden="true"
-                  style={{
-                    position: "absolute",
-                    bottom: 4,
-                    right: 4,
-                    width: 14,
-                    height: 14,
-                    background: "var(--green)",
-                    borderRadius: "50%",
-                    border: "2px solid var(--bg)",
                   }}
                 />
               </div>
@@ -843,6 +831,9 @@ function HomeContent() {
           }
         `}</style>
       </main>
+
+      {/* ── Chat widget (fixed, always visible on landing) ── */}
+      <Chat />
     </>
   );
 }
