@@ -6,7 +6,10 @@ export async function GET(req: NextRequest) {
   const raw = req.nextUrl.searchParams.get("email");
 
   if (!isValidEmail(raw)) {
-    return NextResponse.json({ error: "Email requerido y válido" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Email requerido y válido" },
+      { status: 400 }
+    );
   }
 
   const email = sanitizeEmail(raw);
@@ -16,6 +19,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       credits: result?.credits ?? 0,
       name: result?.name ?? "",
+      packSize: result?.packSize ?? null,
     });
   } catch (err) {
     console.error("[credits] Error fetching credits:", err);

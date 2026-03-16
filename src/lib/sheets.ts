@@ -1,6 +1,6 @@
 import { google } from "googleapis";
-import type { CreditResult } from "@/types";
-import { PACK_VALIDITY_MONTHS } from "@/constants";
+import type { CreditResult, PackSize } from "@/types";
+import { PACK_SIZES, PACK_VALIDITY_MONTHS } from "@/constants";
 
 // ─── Column indices (0-based) — change here if sheet schema changes ───────────
 const COL = {
@@ -15,7 +15,7 @@ const COL = {
 const SHEET_RANGE = "Alumnos!A2:F";
 const SHEET_ID = process.env.GOOGLE_SHEET_ID!;
 
-// ─── Singleton auth client (reused across requests in the same process) ───────
+// ─── Singleton auth client ────────────────────────────────────────────────────
 let _sheetsClient: ReturnType<typeof google.sheets> | null = null;
 
 async function getSheets() {
@@ -50,7 +50,21 @@ function rowToEmail(row: string[]): string {
   return row[COL.email]?.toLowerCase() ?? "";
 }
 
-async function fetchAllRows(): Promise<{ rows: string[][]; sheets: ReturnType<typeof google.sheets> }> {
+/**
+ * Parses the pack size from a packLabel string like "Pack 5 clases" or "Pack 10 clases".
+ * Returns null if the label doesn't match a known pack size.
+ */
+function parsePackSize(packLabel: string): PackSize | null {
+  for (const size of PACK_SIZES) {
+    if (packLabel.includes(String(size))) return size;
+  }
+  return null;
+}
+
+async function fetchAllRows(): Promise<{
+  rows: string[][];
+  sheets: ReturnType<typeof google.sheets>;
+}> {
   const sheets = await getSheets();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
@@ -68,8 +82,10 @@ export async function getCredits(email: string): Promise<CreditResult | null> {
 
   const expiresAt = row[COL.expiresAt] ?? "";
   const credits = isExpired(expiresAt) ? 0 : parseInt(row[COL.credits] ?? "0", 10);
+  const packLabel = row[COL.packLabel] ?? "";
+  const packSize = parsePackSize(packLabel);
 
-  return { credits, name: row[COL.name] ?? "", expiresAt };
+  return { credits, name: row[COL.name] ?? "", packSize, expiresAt };
 }
 
 export async function addOrUpdateStudent(
@@ -87,17 +103,20 @@ export async function addOrUpdateStudent(
 
   if (rowIndex >= 0) {
     const currentExpires = rows[rowIndex][COL.expiresAt] ?? "";
-    const baseCredits = currentExpires && isExpired(currentExpires)
-      ? 0
-      : parseInt(rows[rowIndex][COL.credits] ?? "0", 10);
+    const baseCredits =
+      currentExpires && isExpired(currentExpires)
+        ? 0
+        : parseInt(rows[rowIndex][COL.credits] ?? "0", 10);
 
-    const sheetRow = rowIndex + 2; // +2: 1-indexed + header row
+    const sheetRow = rowIndex + 2;
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
       range: `Alumnos!A${sheetRow}:F${sheetRow}`,
       valueInputOption: "RAW",
       requestBody: {
-        values: [[email, name, baseCredits + creditsToAdd, packLabel, expiresAt, nowStr]],
+        values: [
+          [email, name, baseCredits + creditsToAdd, packLabel, expiresAt, nowStr],
+        ],
       },
     });
   } else {
@@ -134,14 +153,16 @@ export async function decrementCredit(
     range: `Alumnos!A${sheetRow}:F${sheetRow}`,
     valueInputOption: "RAW",
     requestBody: {
-      values: [[
-        rows[rowIndex][COL.email],
-        rows[rowIndex][COL.name],
-        newCredits,
-        rows[rowIndex][COL.packLabel],
-        rows[rowIndex][COL.expiresAt],
-        new Date().toISOString(),
-      ]],
+      values: [
+        [
+          rows[rowIndex][COL.email],
+          rows[rowIndex][COL.name],
+          newCredits,
+          rows[rowIndex][COL.packLabel],
+          rows[rowIndex][COL.expiresAt],
+          new Date().toISOString(),
+        ],
+      ],
     },
   });
 

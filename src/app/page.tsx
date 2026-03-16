@@ -1,15 +1,20 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
+import type React from "react";
 import Image from "next/image";
 import { useUserSession } from "@/hooks/useUserSession";
 import PackModal from "@/components/PackModal";
 import BookingModeView from "@/components/BookingModeView";
+import SignInGate from "@/components/SignInGate";
+import SingleSessionBooking from "@/components/SingleSessionBooking";
+import AuthCorner from "@/components/AuthCorner";
 import Chat from "@/components/Chat";
 import { Spinner, CreditsPill } from "@/components/ui";
 import { COLORS, PACK_CONFIG, PACK_SIZES, CAL_EVENTS } from "@/constants";
 import { SKILL_ITEMS as SKILL_ITEMS_DATA } from "@/constants/skills";
 import type { PackSize, StudentInfo } from "@/types";
+import type { SingleSessionType } from "@/components/SingleSessionBooking";
 
 // ─── SVG icon components ──────────────────────────────────────────────────────
 
@@ -156,15 +161,21 @@ function SessionCard({
   );
 }
 
-/** Pack card for "Packs de horas" section */
+/** Pack card for "Packs de horas" section — shows buy or schedule depending on credits */
 interface PackCardProps {
   size: PackSize;
+  /** null = no active pack for this size; number = credits remaining */
+  activeCredits: number | null;
+  /** true while the credits check is in progress — shows default buy state */
+  creditsLoading: boolean;
   onBuy: (size: PackSize) => void;
+  onSchedule: () => void;
 }
 
-function PackCard({ size, onBuy }: PackCardProps) {
+function PackCard({ size, activeCredits, creditsLoading, onBuy, onSchedule }: PackCardProps) {
   const pack = PACK_CONFIG[size];
   const isPopular = pack.featured;
+  const hasCredits = !creditsLoading && activeCredits !== null && activeCredits > 0;
 
   return (
     <div
@@ -203,11 +214,20 @@ function PackCard({ size, onBuy }: PackCardProps) {
       >
         {size}h
       </div>
-      <div
-        style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14 }}
-      >
-        {size} clases · {pack.perClass}
-      </div>
+
+      {/* Credits info — shows remaining classes when active, default otherwise */}
+      {hasCredits ? (
+        <div style={{ fontSize: 12, marginBottom: 14 }}>
+          <span style={{ color: "var(--green)", fontWeight: 500 }}>
+            {activeCredits} clase{activeCredits !== 1 ? "s" : ""} disponible{activeCredits !== 1 ? "s" : ""}
+          </span>
+          <span style={{ color: "var(--text-muted)" }}> · {pack.perClass}</span>
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14 }}>
+          {size} clases · {pack.perClass}
+        </div>
+      )}
 
       <div
         style={{
@@ -236,15 +256,15 @@ function PackCard({ size, onBuy }: PackCardProps) {
       </div>
 
       <button
-        onClick={() => onBuy(size)}
+        onClick={() => (hasCredits ? onSchedule() : onBuy(size))}
         style={{
           display: "block",
           width: "100%",
           padding: "10px",
           borderRadius: 8,
-          border: isPopular ? "1px solid var(--green)" : "1px solid var(--border)",
-          background: isPopular ? "var(--green)" : "transparent",
-          color: isPopular ? "#0d0f10" : "var(--text-muted)",
+          border: isPopular || hasCredits ? "1px solid var(--green)" : "1px solid var(--border)",
+          background: isPopular || hasCredits ? "var(--green)" : "transparent",
+          color: isPopular || hasCredits ? "#0d0f10" : "var(--text-muted)",
           fontFamily: "inherit",
           fontSize: 13,
           fontWeight: 500,
@@ -260,7 +280,7 @@ function PackCard({ size, onBuy }: PackCardProps) {
         }}
         onMouseLeave={(e) => {
           const btn = e.currentTarget as HTMLButtonElement;
-          if (isPopular) {
+          if (isPopular || hasCredits) {
             btn.style.background = "var(--green)";
             btn.style.borderColor = "var(--green)";
             btn.style.color = "#0d0f10";
@@ -271,7 +291,7 @@ function PackCard({ size, onBuy }: PackCardProps) {
           }
         }}
       >
-        Comprar pack · {pack.price}
+        {hasCredits ? `Reservar clase` : `Comprar pack · ${pack.price}`}
       </button>
     </div>
   );
@@ -279,37 +299,114 @@ function PackCard({ size, onBuy }: PackCardProps) {
 
 // ─── Skill items — merge icons (defined here) with data from constants/skills ─
 
-const SKILL_EMOJIS = ["", "", "📊", "🧮", "🌐", "🤖"] as const;
+function getSkillIcon(index: number, size: number): React.ReactNode {
+  if (index === 0) return <ProgrammingIcon size={size} />;
+  if (index === 1) return <SpringBootIcon size={size} />;
+  const emojis = ["📊", "🧮", "🌐", "🤖"];
+  return emojis[index - 2] ?? null;
+}
 
 const SKILL_ITEMS = SKILL_ITEMS_DATA.map((item, i) => ({
   ...item,
-  icon: i === 0
-    ? <ProgrammingIcon size={16} />
-    : i === 1
-      ? <SpringBootIcon size={16} />
-      : SKILL_EMOJIS[i],
+  icon: getSkillIcon(i, 16),
 }));
 
 // ─── Landing page content ─────────────────────────────────────────────────────
 
-const CAL_BASE_URL = "https://cal.com";
-
 function HomeContent() {
-  const { session, startSession, updateCredits, clearSession } =
-    useUserSession();
+  const {
+    googleUser,
+    isSignedIn,
+    isAuthLoading,
+    packSession,
+    creditsLoading,
+    updateCredits,
+    clearPackSession,
+  } = useUserSession();
+
+  // Per-pack-size credits: only show active credits on the card that matches
+  // the user's current pack size. The other card always shows "Comprar".
+  const packCreditsForSize = (size: PackSize): number | null => {
+    if (
+      packSession !== null &&
+      packSession !== undefined &&
+      packSession.credits > 0 &&
+      packSession.packSize === size
+    ) {
+      return packSession.credits;
+    }
+    return null;
+  };
+
+  // What the user is trying to book (drives SignInGate label)
+  const [pendingSession, setPendingSession] = useState<SingleSessionType | null>(null);
+  // Active single-session booking overlay
+  const [activeSession, setActiveSession] = useState<SingleSessionType | null>(null);
+  // Pack booking overlay (only shown when user explicitly clicks "Reservar clase")
+  const [showPackBooking, setShowPackBooking] = useState(false);
+  // Pack purchase modal
   const [selectedPack, setSelectedPack] = useState<PackSize | null>(null);
+  // Sign-in gate visibility
+  const [signInGateLabel, setSignInGateLabel] = useState("");
 
-  function navigateToCal(event: keyof typeof CAL_EVENTS) {
-    window.location.href = `${CAL_BASE_URL}/${CAL_EVENTS[event]}`;
-  }
-
-  function handleCreditsReady(student: StudentInfo) {
+  function handleCreditsReady(_student: StudentInfo) {
     setSelectedPack(null);
-    startSession(student);
+    // Credits refreshed automatically via useUserSession on next render
   }
 
-  // ── Session / booking mode (user has pack credits) ──
-  if (session) {
+  // When user clicks a session card
+  function handleSessionClick(type: SingleSessionType) {
+    if (!isSignedIn) {
+      const labels: Record<SingleSessionType, string> = {
+        free15min: "reservar el encuentro inicial gratuito",
+        session1h: "reservar una sesión de 1 hora",
+        session2h: "reservar una sesión de 2 horas",
+      };
+      setPendingSession(type);
+      setSignInGateLabel(labels[type]);
+      return;
+    }
+    setActiveSession(type);
+  }
+
+  // When user clicks a pack card buy button
+  function handlePackBuy(size: PackSize) {
+    if (!isSignedIn) {
+      setPendingSession(null);
+      setSignInGateLabel("comprar un pack de clases");
+      setSelectedPack(size);
+      return;
+    }
+    setSelectedPack(size);
+  }
+
+  // When user clicks "Reservar clase" on a pack card with active credits
+  function handlePackSchedule() {
+    if (!isSignedIn) {
+      setSignInGateLabel("reservar una clase de tu pack");
+      return;
+    }
+    setShowPackBooking(true);
+  }
+
+  function handleSignInGateClose() {
+    setPendingSession(null);
+    setSignInGateLabel("");
+    setSelectedPack(null);
+  }
+
+  // Once signed in, resume any pending session — done via useEffect to
+  // avoid calling setState during render
+  useEffect(() => {
+    if (isSignedIn && pendingSession && !activeSession) {
+      setActiveSession(pendingSession);
+      setPendingSession(null);
+      setSignInGateLabel("");
+    }
+  }, [isSignedIn, pendingSession, activeSession]);
+
+  // ── Pack booking overlay (explicit user action only) ─────────────────────────
+  if (showPackBooking && packSession && googleUser?.email) {
     return (
       <main
         className="min-h-screen"
@@ -324,23 +421,20 @@ function HomeContent() {
               minHeight: "100dvh",
             }}
           >
-            {/* Top bar */}
             <div
               className="flex items-center justify-between px-4 sm:px-5 py-3 border-b"
               style={{ borderColor: COLORS.border }}
             >
-              <CreditsPill credits={session.credits} />
+              <CreditsPill credits={packSession.credits} />
               <button
-                onClick={clearSession}
+                onClick={() => setShowPackBooking(false)}
                 className="text-xs transition-colors"
                 style={{ color: COLORS.textMuted }}
                 onMouseEnter={(e) =>
-                  ((e.currentTarget as HTMLElement).style.color =
-                    COLORS.textSecondary)
+                  ((e.currentTarget as HTMLElement).style.color = COLORS.textSecondary)
                 }
                 onMouseLeave={(e) =>
-                  ((e.currentTarget as HTMLElement).style.color =
-                    COLORS.textMuted)
+                  ((e.currentTarget as HTMLElement).style.color = COLORS.textMuted)
                 }
               >
                 ← Volver al inicio
@@ -348,10 +442,13 @@ function HomeContent() {
             </div>
 
             <BookingModeView
-              student={session}
+              student={packSession}
               calLink={CAL_EVENTS.packBooking}
-              onCreditsUpdated={updateCredits}
-              onExit={clearSession}
+              onCreditsUpdated={(remaining) => {
+                updateCredits(remaining);
+                if (remaining <= 0) setShowPackBooking(false);
+              }}
+              onExit={() => setShowPackBooking(false)}
               hideTopBar
             />
           </div>
@@ -360,19 +457,41 @@ function HomeContent() {
     );
   }
 
-  // ── Normal landing ──
+  // ── Single session booking overlay ───────────────────────────────────────────
+  if (activeSession && googleUser?.email) {
+    return (
+      <SingleSessionBooking
+        sessionType={activeSession}
+        userName={googleUser.name ?? ""}
+        userEmail={googleUser.email}
+        onBack={() => setActiveSession(null)}
+      />
+    );
+  }
+
+  // ── Normal landing ───────────────────────────────────────────────────────────
   return (
     <>
-      {/* ── Pack purchase modal ── */}
-      {selectedPack && (
+      {/* Sign-in gate modal */}
+      {signInGateLabel && !isSignedIn && (
+        <SignInGate
+          actionLabel={signInGateLabel}
+          onClose={handleSignInGateClose}
+        />
+      )}
+
+      {/* Pack purchase modal */}
+      {selectedPack && isSignedIn && googleUser?.email && (
         <PackModal
           packSize={selectedPack}
+          userEmail={googleUser.email}
+          userName={googleUser.name ?? ""}
           onClose={() => setSelectedPack(null)}
           onCreditsReady={handleCreditsReady}
         />
       )}
 
-      {/* ── Landing ── */}
+      {/* Landing */}
       <main style={{ position: "relative", zIndex: 1 }}>
         <div
           style={{
@@ -690,7 +809,7 @@ function HomeContent() {
               duration="⏱ 15 minutos · Comentamos tu caso y definimos un plan"
               price="Sin coste"
               isFree
-              onClick={() => navigateToCal("free15min")}
+              onClick={() => handleSessionClick("free15min")}
             />
             <SessionCard
               badge="Más reservada"
@@ -698,13 +817,13 @@ function HomeContent() {
               duration="⏱ 60 minutos · Resolución de dudas o proyecto"
               price="€16"
               featured
-              onClick={() => navigateToCal("session1h")}
+              onClick={() => handleSessionClick("session1h")}
             />
             <SessionCard
               name="Sesión de 2 horas"
               duration="⏱ 120 minutos · Para temas que requieren profundidad"
               price="€30"
-              onClick={() => navigateToCal("session2h")}
+              onClick={() => handleSessionClick("session2h")}
             />
           </section>
 
@@ -745,7 +864,10 @@ function HomeContent() {
                 <PackCard
                   key={size}
                   size={size}
-                  onBuy={(s) => setSelectedPack(s)}
+                  activeCredits={creditsLoading ? null : packCreditsForSize(size)}
+                  creditsLoading={creditsLoading && isSignedIn}
+                  onBuy={handlePackBuy}
+                  onSchedule={handlePackSchedule}
                 />
               ))}
             </div>
@@ -832,7 +954,14 @@ function HomeContent() {
         `}</style>
       </main>
 
-      {/* ── Chat widget (fixed, always visible on landing) ── */}
+      {/* ── Auth corner (fixed top-right) ── */}
+      <AuthCorner
+        user={googleUser}
+        packCredits={packSession?.credits ?? null}
+        packSize={packSession?.packSize ?? null}
+      />
+
+      {/* ── Chat widget (fixed bottom-right) ── */}
       <Chat />
     </>
   );

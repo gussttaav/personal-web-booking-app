@@ -8,73 +8,57 @@ import type { PackSize, StudentInfo } from "@/types";
 
 interface PackModalProps {
   packSize: PackSize;
+  /** Verified email from the Google session */
+  userEmail: string;
+  /** Verified name from the Google session */
+  userName: string;
   onClose: () => void;
-  /** Called when the user already has credits — skip checkout and go straight to booking */
+  /** Called when the user already has credits — skip checkout */
   onCreditsReady?: (student: StudentInfo) => void;
 }
 
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  backgroundColor: "#0f1117",
-  border: `1px solid ${COLORS.border}`,
-  borderRadius: "12px",
-  padding: "10px 16px",
-  fontSize: "14px",
-  color: "#ffffff",
-  outline: "none",
-  transition: "border-color 0.2s",
-};
-
-function validateForm(name: string, email: string): string | null {
-  if (!name.trim()) return "Por favor, escribe tu nombre.";
-  if (!email.trim()) return "Por favor, escribe tu email.";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "El email no es válido.";
-  return null;
-}
-
-export default function PackModal({ packSize, onClose, onCreditsReady }: PackModalProps) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+export default function PackModal({
+  packSize,
+  userEmail,
+  userName,
+  onClose,
+  onCreditsReady,
+}: PackModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const pack = PACK_CONFIG[packSize];
 
-  const handleSubmit = useCallback(async () => {
-    const validationError = validateForm(name, email);
-    if (validationError) { setError(validationError); return; }
-
+  const handleBuy = useCallback(async () => {
     setLoading(true);
     setError("");
 
     try {
-      // Check for existing credits first
-      const creditsData = await api.credits.get(email.trim());
-
+      // Check for existing credits first (user may have already purchased)
+      const creditsData = await api.credits.get(userEmail);
       if (creditsData.credits > 0) {
         onClose();
-        onCreditsReady?.({ email: email.trim(), name: name.trim(), credits: creditsData.credits });
+        onCreditsReady?.({
+          email: userEmail,
+          name: userName,
+          credits: creditsData.credits,
+        });
         return;
       }
 
-      // No credits → go to Stripe
-      const checkoutData = await api.stripe.checkout({
-        name: name.trim(),
-        email: email.trim(),
-        packSize,
-      });
-
+      // No credits → go to Stripe (identity comes from server-side session)
+      const checkoutData = await api.stripe.checkoutPack({ packSize });
       window.location.href = checkoutData.url;
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Error de conexión. Inténtalo de nuevo.");
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Error de conexión. Inténtalo de nuevo."
+      );
     } finally {
       setLoading(false);
     }
-  }, [name, email, packSize, onClose, onCreditsReady]);
-
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter") handleSubmit();
-  }
+  }, [userEmail, userName, packSize, onClose, onCreditsReady]);
 
   return (
     <div
@@ -100,97 +84,78 @@ export default function PackModal({ packSize, onClose, onCreditsReady }: PackMod
               <p className="text-sm" style={{ color: COLORS.textSecondary }}>
                 Gustavo Torres Guerrero
               </p>
-              <h2 id="pack-modal-title" className="text-lg font-bold text-white">
+              <h2
+                id="pack-modal-title"
+                className="text-lg font-bold"
+                style={{ color: COLORS.textPrimary }}
+              >
                 Pack {packSize} clases
               </h2>
             </div>
           </div>
 
-          {/* Summary */}
-          <div className="rounded-xl p-3 text-sm space-y-1" style={{ backgroundColor: "#0f1117" }}>
+          {/* Pack summary */}
+          <div
+            className="rounded-xl p-3 text-sm space-y-1"
+            style={{ backgroundColor: COLORS.background }}
+          >
             <p style={{ color: COLORS.textSecondary }}>
               🕐 {packSize} horas · A reservar individualmente
             </p>
             <p style={{ color: COLORS.textSecondary }}>
               💳 Pago único de{" "}
-              <strong className="text-white">{pack.price}</strong>
+              <strong style={{ color: COLORS.textPrimary }}>{pack.price}</strong>
             </p>
             <p style={{ color: COLORS.textSecondary }}>
               📅 Válido{" "}
-              <strong className="text-white">6 meses</strong> desde la compra
+              <strong style={{ color: COLORS.textPrimary }}>6 meses</strong>{" "}
+              desde la compra
             </p>
           </div>
         </div>
 
-        {/* Form */}
-        {/* OAuth2 note: replace this form with an OAuth login button.
-            The onCreditsReady / Stripe flow stays the same. */}
-        <div className="space-y-4">
+        {/* Signed-in user info */}
+        <div
+          className="flex items-center gap-3 rounded-xl p-3 mb-4"
+          style={{
+            background: COLORS.brandMuted,
+            border: `1px solid ${COLORS.brandBorder}`,
+          }}
+        >
+          <span style={{ fontSize: 20 }} aria-hidden="true">✓</span>
           <div>
-            <label
-              htmlFor="modal-name"
-              className="block text-sm font-medium mb-1"
-              style={{ color: COLORS.textBody }}
-            >
-              Tu Nombre <span style={{ color: COLORS.brand }} aria-hidden="true">*</span>
-            </label>
-            <input
-              id="modal-name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="María García"
-              autoComplete="name"
-              style={inputStyle}
-              onFocus={(e) => (e.currentTarget.style.borderColor = COLORS.brand)}
-              onBlur={(e) => (e.currentTarget.style.borderColor = COLORS.border)}
-            />
+            <p className="text-sm font-medium" style={{ color: COLORS.brand }}>
+              Identificado como
+            </p>
+            <p className="text-xs" style={{ color: COLORS.textSecondary }}>
+              {userName} · {userEmail}
+            </p>
           </div>
-
-          <div>
-            <label
-              htmlFor="modal-email"
-              className="block text-sm font-medium mb-1"
-              style={{ color: COLORS.textBody }}
-            >
-              Email <span style={{ color: COLORS.brand }} aria-hidden="true">*</span>
-            </label>
-            <input
-              id="modal-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="maria@ejemplo.com"
-              autoComplete="email"
-              style={inputStyle}
-              onFocus={(e) => (e.currentTarget.style.borderColor = COLORS.brand)}
-              onBlur={(e) => (e.currentTarget.style.borderColor = COLORS.border)}
-            />
-          </div>
-
-          {error && <Alert variant="error">{error}</Alert>}
         </div>
 
+        {error && <Alert variant="error">{error}</Alert>}
+
         {/* Actions */}
-        <div className="flex gap-3 mt-6">
+        <div className="flex gap-3 mt-4">
           <Button variant="secondary" onClick={onClose} style={{ flex: 1 }}>
             Atrás
           </Button>
           <Button
             variant="primary"
-            onClick={handleSubmit}
+            onClick={handleBuy}
             isLoading={loading}
             loadingText="Verificando..."
             style={{ flex: 1 }}
           >
-            Continuar
+            Comprar · {pack.price}
           </Button>
         </div>
 
-        <p className="text-xs text-center mt-4" style={{ color: COLORS.textMuted }}>
-          El pago se procesará de forma segura a través de Stripe.
+        <p
+          className="text-xs text-center mt-4"
+          style={{ color: COLORS.textMuted }}
+        >
+          🔒 Pago seguro con Stripe
         </p>
       </Card>
     </div>

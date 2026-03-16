@@ -1,9 +1,7 @@
 /**
  * Typed API client for all server interactions.
- *
- * OAuth2 readiness: add `getAccessToken()` here and attach
- *   Authorization: Bearer <token>
- * to the headers object. Every consumer will get auth for free.
+ * Cookies (including the NextAuth session cookie) are sent automatically
+ * with every fetch — no manual Authorization header needed.
  */
 
 import type {
@@ -13,15 +11,11 @@ import type {
   PackSize,
 } from "@/types";
 
-async function request<T>(
-  url: string,
-  options?: RequestInit
-): Promise<T> {
+async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      // OAuth2 hook: Authorization: `Bearer ${await getAccessToken()}`,
       ...options?.headers,
     },
   });
@@ -64,10 +58,18 @@ export const api = {
   },
 
   stripe: {
-    checkout: (params: { name: string; email: string; packSize: PackSize }) =>
+    /** Purchase a pack of 5 or 10 classes */
+    checkoutPack: (params: { packSize: PackSize }) =>
       request<CheckoutResponse>("/api/stripe/checkout", {
         method: "POST",
-        body: JSON.stringify(params),
+        body: JSON.stringify({ type: "pack", packSize: params.packSize }),
+      }),
+
+    /** Pay for a single 1h or 2h session */
+    checkoutSingleSession: (params: { duration: "1h" | "2h" }) =>
+      request<CheckoutResponse>("/api/stripe/checkout", {
+        method: "POST",
+        body: JSON.stringify({ type: "single", duration: params.duration }),
       }),
   },
 } as const;

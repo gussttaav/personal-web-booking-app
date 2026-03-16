@@ -2,9 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Design tokens ─────────────────────────────────────────────────────────── */
+/* ─── Design tokens ──────────────────────────────────────────────────────── */
 :root {
-  /* New landing-page palette */
   --bg: #0d0f10;
   --surface: #141618;
   --surface-2: #1c1f21;
@@ -17,7 +16,7 @@
   --text-dim: #4a4f54;
   --radius: 16px;
 
-  /* Legacy tokens kept for PackModal, BookingModeView, pago-exitoso */
+  /* Legacy tokens for PackModal, BookingModeView, pago-exitoso */
   --color-brand: #3ddc84;
   --color-brand-hover: #34c274;
   --color-surface: #141618;
@@ -70,28 +69,21 @@ body::after {
   transform: translateX(-50%);
   width: 600px;
   height: 600px;
-  background: radial-gradient(
-    circle,
-    rgba(61, 220, 132, 0.06) 0%,
-    transparent 70%
-  );
+  background: radial-gradient(circle, rgba(61, 220, 132, 0.06) 0%, transparent 70%);
   pointer-events: none;
   z-index: 0;
 }
 
-/* Focus styles for keyboard navigation */
 :focus-visible {
   outline: 2px solid var(--green);
   outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  html {
-    scroll-behavior: smooth;
-  }
+  html { scroll-behavior: smooth; }
 }
 
-/* ─── Skills grid ────────────────────────────────────────────────────────────── */
+/* ─── Skills grid ────────────────────────────────────────────────────────── */
 
 .skills-grid {
   display: grid;
@@ -147,7 +139,7 @@ body::after {
   color: var(--green);
 }
 
-/* ─── Skill tooltip ──────────────────────────────────────────────────────────── */
+/* ─── Skill tooltip ──────────────────────────────────────────────────────── */
 
 .skill-tooltip {
   position: absolute;
@@ -191,7 +183,6 @@ body::after {
   transform: translateY(0);
 }
 
-/* Right-aligned tooltip for even-column items */
 .skill-tooltip--right {
   left: auto;
   right: 0;
@@ -202,10 +193,8 @@ body::after {
   right: 24px;
 }
 
+/* ─── Chat widget ────────────────────────────────────────────────────────── */
 
-/* ─── Chat widget ─────────────────────────────────────────────────────────── */
-
-/* FAB button */
 .chat-fab {
   position: fixed;
   bottom: 28px;
@@ -229,26 +218,27 @@ body::after {
   box-shadow: 0 6px 32px rgba(61, 220, 132, 0.5), 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
-/* FAB icon transitions */
 .chat-fab-icon-chat,
 .chat-fab-icon-close {
   position: absolute;
   transition: opacity 0.15s, transform 0.15s;
 }
+
 .chat-fab-icon-close {
   opacity: 0;
   transform: rotate(-90deg) scale(0.7);
 }
+
 .chat-fab--open .chat-fab-icon-chat {
   opacity: 0;
   transform: rotate(90deg) scale(0.7);
 }
+
 .chat-fab--open .chat-fab-icon-close {
   opacity: 1;
   transform: rotate(0deg) scale(1);
 }
 
-/* Unread dot */
 .chat-fab-dot {
   position: absolute;
   top: 4px;
@@ -266,7 +256,6 @@ body::after {
   50% { transform: scale(1.2); }
 }
 
-/* Panel */
 .chat-panel {
   position: fixed;
   bottom: 92px;
@@ -294,7 +283,6 @@ body::after {
   pointer-events: all;
 }
 
-/* Panel header */
 .chat-header {
   padding: 16px 18px 14px;
   border-bottom: 1px solid var(--border);
@@ -343,7 +331,6 @@ body::after {
   display: inline-block;
 }
 
-/* Close button inside header */
 .chat-close-btn {
   background: none;
   border: none;
@@ -357,12 +344,12 @@ body::after {
   transition: color 0.15s, background 0.15s;
   flex-shrink: 0;
 }
+
 .chat-close-btn:hover {
   color: var(--text);
   background: rgba(255, 255, 255, 0.06);
 }
 
-/* Messages area */
 .chat-messages {
   flex: 1;
   overflow-y: auto;
@@ -374,7 +361,6 @@ body::after {
   scrollbar-color: var(--border) transparent;
 }
 
-/* Message bubbles */
 .chat-msg {
   max-width: 88%;
   padding: 10px 13px;
@@ -405,7 +391,6 @@ body::after {
   font-weight: 500;
 }
 
-/* Typing indicator */
 .chat-typing {
   display: flex;
   align-items: center;
@@ -435,7 +420,6 @@ body::after {
   30% { transform: translateY(-5px); opacity: 1; }
 }
 
-/* Suggestions */
 .chat-suggestions {
   padding: 0 14px 10px;
   display: flex;
@@ -467,7 +451,6 @@ body::after {
   cursor: not-allowed;
 }
 
-/* Input row */
 .chat-input-row {
   padding: 10px 12px 12px;
   border-top: 1px solid var(--border);
@@ -518,7 +501,6 @@ body::after {
   cursor: not-allowed;
 }
 
-/* Mobile adjustments */
 @media (max-width: 400px) {
   .chat-panel {
     width: calc(100vw - 24px);
@@ -529,4 +511,201 @@ body::after {
     right: 16px;
     bottom: 16px;
   }
+}
+
+/* ─── Google sign-in button (SignInGate modal) ───────────────────────────── */
+
+.google-signin-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 11px 20px;
+  background: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  font-family: var(--font-sans), "DM Sans", sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f1f1f;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  width: 100%;
+}
+
+.google-signin-btn:hover {
+  background: #f5f5f5;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* ─── Auth corner widget ─────────────────────────────────────────────────── */
+
+.auth-corner {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  z-index: 500;
+}
+
+/* Sign-in button (logged out) */
+.auth-signin-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px 7px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  font-family: var(--font-sans), "DM Sans", sans-serif;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.auth-signin-btn:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--text);
+}
+
+.auth-signin-btn svg { flex-shrink: 0; }
+
+/* On mobile hide the text label — keep only the icon to avoid overlap */
+@media (max-width: 520px) {
+  .auth-signin-btn .auth-signin-label { display: none; }
+  .auth-signin-btn { padding: 7px 10px; }
+}
+
+/* Avatar button (logged in) */
+.auth-avatar-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--green-dim);
+  border: 2px solid rgba(61, 220, 132, 0.35);
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-sans), "DM Sans", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  padding: 0;
+}
+
+.auth-avatar-btn:hover {
+  border-color: rgba(61, 220, 132, 0.7);
+  box-shadow: 0 0 0 3px rgba(61, 220, 132, 0.1);
+}
+
+/* Dropdown panel */
+.auth-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 220px;
+  background: #1a1d1f;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-6px) scale(0.97);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  transform-origin: top right;
+}
+
+.auth-dropdown--open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: all;
+}
+
+.auth-dropdown-user {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.auth-dropdown-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-dropdown-email {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-pack-status {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.auth-pack-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--green);
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+
+.auth-pack-pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  flex-shrink: 0;
+}
+
+.auth-pack-remaining {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.auth-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  border: none;
+  background: none;
+  width: 100%;
+  font-family: var(--font-sans), "DM Sans", sans-serif;
+  text-align: left;
+}
+
+.auth-dropdown-item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.auth-dropdown-item--signout {
+  color: #e05a5a;
+  border-top: 1px solid var(--border);
+}
+
+.auth-dropdown-item--signout:hover {
+  background: rgba(224, 90, 90, 0.08);
+  color: #f07070;
 }

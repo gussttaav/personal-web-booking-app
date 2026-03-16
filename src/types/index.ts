@@ -11,6 +11,8 @@ export interface StudentInfo {
 export interface CreditResult {
   credits: number;
   name: string;
+  /** Which pack size the credits belong to (5 or 10), or null if not determinable */
+  packSize: PackSize | null;
   expiresAt?: string;
 }
 
@@ -28,20 +30,21 @@ export interface BookResponse {
 export interface CreditsResponse {
   credits: number;
   name: string;
+  /** Which pack size the credits belong to */
+  packSize: PackSize | null;
 }
 
 export interface CheckoutResponse {
   url: string;
 }
 
-// ─── OAuth2-ready session shape (used today via URL params, later via OAuth) ─
-// When you add OAuth2, replace `UserSession` population in `useUserSession`
-// hook — the rest of the app will keep working without changes.
+// ─── Session shape ────────────────────────────────────────────────────────────
 
 export interface UserSession {
   email: string;
   name: string;
   credits: number;
-  /** ISO string — populated once credits are confirmed */
+  /** Which pack size these credits belong to */
+  packSize: PackSize | null;
   creditsConfirmedAt?: string;
 }
