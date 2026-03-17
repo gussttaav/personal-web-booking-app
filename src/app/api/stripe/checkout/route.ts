@@ -1,7 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { z } from "zod";
 import { auth } from "@/auth";
-import { isValidPackSize } from "@/lib/validation";
+import { checkoutRatelimit } from "@/lib/ratelimit";
+
+// ─── Zod schemas ──────────────────────────────────────────────────────────────
+
+const PackCheckoutSchema = z.object({
+  type: z.literal("pack"),
+  packSize: z.union([z.literal(5), z.literal(10)]),
+});
+
+const SingleCheckoutSchema = z.object({
+  type: z.literal("single"),
+  duration: z.enum(["1h", "2h"]),
+});
+
+const CheckoutBodySchema = z.discriminatedUnion("type", [
+  PackCheckoutSchema,
+  SingleCheckoutSchema,
+]);
+
+// ─── Stripe helpers ───────────────────────────────────────────────────────────
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -29,8 +49,20 @@ function getSingleSessionPriceId(duration: "1h" | "2h"): string {
   return id;
 }
 
+// ─── Route handler ────────────────────────────────────────────────────────────
+
 export async function POST(req: NextRequest) {
-  // ── Auth check — identity always comes from the verified session ──
+  // ── Rate limit ────────────────────────────────────────────────────────────
+  const ip = req.headers.get("x-forwarded-for") ?? "127.0.0.1";
+  const { success } = await checkoutRatelimit.limit(ip);
+  if (!success) {
+    return NextResponse.json(
+      { error: "Demasiadas peticiones" },
+      { status: 429 }
+    );
+  }
+
+  // ── Auth ──────────────────────────────────────────────────────────────────
   const session = await auth();
   if (!session?.user?.email) {
     return NextResponse.json(
@@ -51,9 +83,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: unknown;
+  // ── Parse & validate body ─────────────────────────────────────────────────
+  let rawBody: unknown;
   try {
-    body = await req.json();
+    rawBody = await req.json();
   } catch {
     return NextResponse.json(
       { error: "Cuerpo de petición inválido" },
@@ -61,75 +94,55 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { type } = body as Record<string, unknown>;
+  const parsed = CheckoutBodySchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Petición inválida" },
+      { status: 400 }
+    );
+  }
 
+  const body = parsed.data; // fully typed — no more 'as' casts
+
+  // ── Create Stripe session ─────────────────────────────────────────────────
   try {
     const stripe = getStripe();
 
-    // ── Pack checkout ──────────────────────────────────────────────────────────
-    if (type === "pack") {
-      const { packSize } = body as Record<string, unknown>;
-
-      if (!isValidPackSize(packSize)) {
-        return NextResponse.json({ error: "Pack no válido" }, { status: 400 });
-      }
-
+    if (body.type === "pack") {
       const stripeSession = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         mode: "payment",
         customer_email: email,
-        line_items: [{ price: getPackPriceId(packSize as number), quantity: 1 }],
+        line_items: [{ price: getPackPriceId(body.packSize), quantity: 1 }],
         metadata: {
           student_name: name,
           student_email: email,
-          pack_size: String(packSize),
+          pack_size: String(body.packSize),
           checkout_type: "pack",
         },
         success_url: `${baseUrl}/pago-exitoso?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/?cancelled=true`,
       });
-
       return NextResponse.json({ url: stripeSession.url });
     }
 
-    // ── Single session checkout ────────────────────────────────────────────────
-    if (type === "single") {
-      const { duration } = body as Record<string, unknown>;
+    // body.type === "single"
+    const stripeSession = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      mode: "payment",
+      customer_email: email,
+      line_items: [{ price: getSingleSessionPriceId(body.duration), quantity: 1 }],
+      metadata: {
+        student_name: name,
+        student_email: email,
+        checkout_type: "single",
+        session_duration: body.duration,
+      },
+      success_url: `${baseUrl}/sesion-confirmada?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/?cancelled=true`,
+    });
+    return NextResponse.json({ url: stripeSession.url });
 
-      if (duration !== "1h" && duration !== "2h") {
-        return NextResponse.json(
-          { error: "Duración de sesión no válida" },
-          { status: 400 }
-        );
-      }
-
-      const stripeSession = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        mode: "payment",
-        customer_email: email,
-        line_items: [
-          {
-            price: getSingleSessionPriceId(duration as "1h" | "2h"),
-            quantity: 1,
-          },
-        ],
-        metadata: {
-          student_name: name,
-          student_email: email,
-          checkout_type: "single",
-          session_duration: duration as string,
-        },
-        success_url: `${baseUrl}/sesion-confirmada?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${baseUrl}/?cancelled=true`,
-      });
-
-      return NextResponse.json({ url: stripeSession.url });
-    }
-
-    return NextResponse.json(
-      { error: "Tipo de checkout no válido" },
-      { status: 400 }
-    );
   } catch (err) {
     console.error("[checkout] Stripe error:", err);
     return NextResponse.json(

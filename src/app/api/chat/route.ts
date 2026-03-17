@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chat, type GeminiMessage } from "@/lib/gemini";
 import { CHAT_SYSTEM_PROMPT } from "@/constants/chat-prompt";
+import { chatRatelimit } from "@/lib/ratelimit";
 
 // ─── Input validation ─────────────────────────────────────────────────────────
 
 const MAX_MESSAGE_LENGTH = 1000;
-const MAX_HISTORY_TURNS = 10; // keep last 10 turns to bound token usage
+const MAX_HISTORY_TURNS = 10;
 
 function isValidHistory(value: unknown): value is GeminiMessage[] {
   if (!Array.isArray(value)) return false;
@@ -23,6 +24,17 @@ function isValidHistory(value: unknown): value is GeminiMessage[] {
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  // ── Rate limit ────────────────────────────────────────────────────────────
+  const ip = req.headers.get("x-forwarded-for") ?? "127.0.0.1";
+  const { success } = await chatRatelimit.limit(ip);
+  if (!success) {
+    return NextResponse.json(
+      { error: "Demasiadas peticiones. Espera un momento e inténtalo de nuevo." },
+      { status: 429 }
+    );
+  }
+
+  // ── Parse body ────────────────────────────────────────────────────────────
   let body: unknown;
   try {
     body = await req.json();
@@ -35,7 +47,7 @@ export async function POST(req: NextRequest) {
 
   const { message, history } = body as Record<string, unknown>;
 
-  // Validate message
+  // ── Validate message ──────────────────────────────────────────────────────
   if (typeof message !== "string" || !message.trim()) {
     return NextResponse.json(
       { error: "El mensaje no puede estar vacío" },
@@ -49,7 +61,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Validate history
+  // ── Validate history ──────────────────────────────────────────────────────
   if (!isValidHistory(history)) {
     return NextResponse.json(
       { error: "Historial de conversación inválido" },
@@ -57,15 +69,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Trim history to the last N turns to control token usage
   const trimmedHistory = history.slice(-MAX_HISTORY_TURNS);
 
+  // ── Call Gemini ───────────────────────────────────────────────────────────
   try {
-    const reply = await chat(
-      CHAT_SYSTEM_PROMPT,
-      trimmedHistory,
-      message.trim()
-    );
+    const reply = await chat(CHAT_SYSTEM_PROMPT, trimmedHistory, message.trim());
     return NextResponse.json({ reply });
   } catch (err) {
     console.error("[chat] Gemini API error:", err);

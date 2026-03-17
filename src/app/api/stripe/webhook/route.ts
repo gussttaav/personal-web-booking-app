@@ -8,23 +8,24 @@ function getStripe() {
   return new Stripe(key);
 }
 
-// Required: disable body parsing so we can verify the raw signature
-export const config = {
-  api: { bodyParser: false },
-};
-
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = req.headers.get("stripe-signature");
 
   if (!sig) {
-    return NextResponse.json({ error: "Missing stripe-signature header" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Missing stripe-signature header" },
+      { status: 400 }
+    );
   }
 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
     console.error("[webhook] STRIPE_WEBHOOK_SECRET is not set");
-    return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Server configuration error" },
+      { status: 500 }
+    );
   }
 
   let event: Stripe.Event;
@@ -42,6 +43,7 @@ export async function POST(req: NextRequest) {
     const email = session.metadata?.student_email ?? session.customer_email ?? "";
     const name = session.metadata?.student_name ?? "";
     const packSize = parseInt(session.metadata?.pack_size ?? "0", 10);
+    const stripeSessionId = session.id; // used for idempotency
 
     if (!email || !packSize) {
       console.error("[webhook] Missing metadata:", { email, name, packSize });
@@ -50,8 +52,14 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      await addOrUpdateStudent(email, name, packSize, `Pack ${packSize} clases`);
-      console.info(`[webhook] Credits added: ${email} +${packSize}`);
+      await addOrUpdateStudent(
+        email,
+        name,
+        packSize,
+        `Pack ${packSize} clases`,
+        stripeSessionId
+      );
+      console.info(`[webhook] Credits added: ${email} +${packSize} (${stripeSessionId})`);
     } catch (err) {
       console.error("[webhook] Error updating sheet:", err);
       // Return 500 so Stripe will retry

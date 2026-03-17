@@ -18,6 +18,10 @@ export function useCreditsPoller({ enabled }: UseCreditsPollerOptions) {
   const poll = useCallback(async () => {
     if (!enabled) return;
 
+    // Don't poll if the tab is in the background — saves requests and
+    // avoids triggering rate limits when users have multiple tabs open.
+    if (document.hidden) return;
+
     setState("polling");
     let attempts = 0;
 
@@ -32,7 +36,7 @@ export function useCreditsPoller({ enabled }: UseCreditsPollerOptions) {
           clearInterval(interval);
         }
       } catch {
-        // Swallow — keep retrying
+        // Swallow — keep retrying until max attempts
       }
 
       if (attempts >= CREDITS_POLL_MAX_ATTEMPTS) {

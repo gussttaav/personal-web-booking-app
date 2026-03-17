@@ -2,7 +2,7 @@ import { google } from "googleapis";
 import type { CreditResult, PackSize } from "@/types";
 import { PACK_SIZES, PACK_VALIDITY_MONTHS } from "@/constants";
 
-// ─── Column indices (0-based) — change here if sheet schema changes ───────────
+// ─── Column indices (0-based) ─────────────────────────────────────────────────
 const COL = {
   email: 0,
   name: 1,
@@ -10,17 +10,16 @@ const COL = {
   packLabel: 3,
   expiresAt: 4,
   lastUpdated: 5,
+  stripeSessionId: 6, // new — used for webhook idempotency
 } as const;
 
-const SHEET_RANGE = "Alumnos!A2:F";
+const SHEET_RANGE = "Alumnos!A2:G"; // extended from F to G
 const SHEET_ID = process.env.GOOGLE_SHEET_ID!;
 
-// ─── Singleton auth client ────────────────────────────────────────────────────
-let _sheetsClient: ReturnType<typeof google.sheets> | null = null;
-
+// ─── Auth client ──────────────────────────────────────────────────────────────
+// No singleton — googleapis handles token refresh internally.
+// A cached client silently breaks after the 1-hour OAuth token expiry.
 async function getSheets() {
-  // Do not cache — googleapis handles token refresh internally.
-  // A cached client silently breaks after the 1-hour OAuth token expiry.
   const auth = new google.auth.GoogleAuth({
     credentials: {
       client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
@@ -28,7 +27,6 @@ async function getSheets() {
     },
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
-
   return google.sheets({ version: "v4", auth });
 }
 
@@ -49,10 +47,6 @@ function rowToEmail(row: string[]): string {
   return row[COL.email]?.toLowerCase() ?? "";
 }
 
-/**
- * Parses the pack size from a packLabel string like "Pack 5 clases" or "Pack 10 clases".
- * Returns null if the label doesn't match a known pack size.
- */
 function parsePackSize(packLabel: string): PackSize | null {
   for (const size of PACK_SIZES) {
     if (packLabel.includes(String(size))) return size;
@@ -91,11 +85,23 @@ export async function addOrUpdateStudent(
   email: string,
   name: string,
   creditsToAdd: number,
-  packLabel: string
+  packLabel: string,
+  stripeSessionId: string // new param — used to prevent duplicate webhook processing
 ): Promise<void> {
   const { rows, sheets } = await fetchAllRows();
-  const rowIndex = rows.findIndex((r) => rowToEmail(r) === email.toLowerCase());
 
+  // ── Idempotency check ──────────────────────────────────────────────────────
+  // Stripe retries webhooks on failure. If we already processed this exact
+  // checkout session, skip the update silently.
+  const alreadyProcessed = rows.some(
+    (r) => r[COL.stripeSessionId] === stripeSessionId
+  );
+  if (alreadyProcessed) {
+    console.info(`[sheets] Duplicate webhook skipped: ${stripeSessionId}`);
+    return;
+  }
+
+  const rowIndex = rows.findIndex((r) => rowToEmail(r) === email.toLowerCase());
   const now = new Date();
   const expiresAt = addMonths(now, PACK_VALIDITY_MONTHS).toISOString();
   const nowStr = now.toISOString();
@@ -110,11 +116,11 @@ export async function addOrUpdateStudent(
     const sheetRow = rowIndex + 2;
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
-      range: `Alumnos!A${sheetRow}:F${sheetRow}`,
+      range: `Alumnos!A${sheetRow}:G${sheetRow}`, // extended to G
       valueInputOption: "RAW",
       requestBody: {
         values: [
-          [email, name, baseCredits + creditsToAdd, packLabel, expiresAt, nowStr],
+          [email, name, baseCredits + creditsToAdd, packLabel, expiresAt, nowStr, stripeSessionId],
         ],
       },
     });
@@ -124,7 +130,7 @@ export async function addOrUpdateStudent(
       range: "Alumnos!A2",
       valueInputOption: "RAW",
       requestBody: {
-        values: [[email, name, creditsToAdd, packLabel, expiresAt, nowStr]],
+        values: [[email, name, creditsToAdd, packLabel, expiresAt, nowStr, stripeSessionId]],
       },
     });
   }
@@ -149,7 +155,7 @@ export async function decrementCredit(
 
   await sheets.spreadsheets.values.update({
     spreadsheetId: SHEET_ID,
-    range: `Alumnos!A${sheetRow}:F${sheetRow}`,
+    range: `Alumnos!A${sheetRow}:G${sheetRow}`,
     valueInputOption: "RAW",
     requestBody: {
       values: [
@@ -160,6 +166,7 @@ export async function decrementCredit(
           rows[rowIndex][COL.packLabel],
           rows[rowIndex][COL.expiresAt],
           new Date().toISOString(),
+          rows[rowIndex][COL.stripeSessionId] ?? "",
         ],
       ],
     },

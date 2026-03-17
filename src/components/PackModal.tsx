@@ -35,7 +35,7 @@ export default function PackModal({
 
     try {
       // Check for existing credits first (user may have already purchased)
-      const creditsData = await api.credits.get(userEmail);
+      const creditsData = await api.credits.get();
       if (creditsData.credits > 0) {
         onClose();
         onCreditsReady?.({

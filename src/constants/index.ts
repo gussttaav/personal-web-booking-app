@@ -40,8 +40,8 @@ export const PACK_VALIDITY_MONTHS = 6;
 
 // ─── Polling ──────────────────────────────────────────────────────────────────
 
-export const CREDITS_POLL_INTERVAL_MS = 1000;
-export const CREDITS_POLL_MAX_ATTEMPTS = 20;
+export const CREDITS_POLL_INTERVAL_MS = 2500; // Stripe webhooks take 2-5s anyway
+export const CREDITS_POLL_MAX_ATTEMPTS = 8;
 
 // ─── Cal.com event slugs ──────────────────────────────────────────────────────
 
