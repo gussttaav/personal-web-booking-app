@@ -12,9 +12,6 @@ const CalComBooking = dynamic(() => import("@/components/CalComBooking"), {
   loading: () => (
     <div className="flex items-center justify-center" style={{ minHeight: "400px" }}>
       <Spinner label="Cargando calendario..." />
-      <p className="text-sm mt-2" style={{ color: COLORS.textSecondary }}>
-        Cargando calendario...
-      </p>
     </div>
   ),
 });
@@ -26,8 +23,6 @@ interface BookingModeViewProps {
   calLink: string;
   onCreditsUpdated: (remaining: number) => void;
   onExit: () => void;
-  /** When true the inner credits+exit bar is suppressed — used when the
-   *  parent already renders a unified top bar. */
   hideTopBar?: boolean;
 }
 
@@ -63,7 +58,7 @@ export default function BookingModeView({
 
   return (
     <div className="flex flex-col rounded-2xl overflow-hidden" style={{ minHeight: "580px" }}>
-      {/* Top bar — hidden when parent renders a unified bar */}
+      {/* Top bar */}
       {!hideTopBar && (
         <div
           className="flex items-center justify-between px-4 sm:px-5 py-3 border-b"
@@ -119,14 +114,12 @@ export default function BookingModeView({
             >
               ✓
             </div>
-
             <div>
               <h3 className="text-xl font-bold text-white">¡Clase reservada!</h3>
               <p className="mt-1 text-sm" style={{ color: COLORS.textSecondary }}>
                 Recibirás una confirmación por email.
               </p>
             </div>
-
             <Card className="p-4">
               {remaining > 0 ? (
                 <>
@@ -148,7 +141,6 @@ export default function BookingModeView({
                 </>
               )}
             </Card>
-
             <div className="space-y-3">
               {remaining > 0 && (
                 <Button variant="primary" fullWidth onClick={bookAnother}>
@@ -163,7 +155,7 @@ export default function BookingModeView({
         </div>
       )}
 
-      {/* Phase: error */}
+      {/* Phase: error — errMsg rendered ONCE inside <Alert> only (bug fix) */}
       {phase === "error" && (
         <div className="flex-1 flex items-center justify-center p-6 sm:p-8">
           <div className="text-center space-y-4 max-w-sm w-full">
@@ -176,10 +168,8 @@ export default function BookingModeView({
             </div>
             <div>
               <h3 className="text-lg font-bold text-white">Algo salió mal</h3>
-              <p className="text-sm mt-1" style={{ color: COLORS.textSecondary }}>
-                {errMsg}
-              </p>
             </div>
+            {/* ✅ errMsg rendered only here — removed the duplicate bare <p> */}
             <Alert variant="error">{errMsg}</Alert>
             <Button variant="primary" fullWidth onClick={() => setPhase("idle")}>
               Intentar de nuevo
