@@ -140,3 +140,31 @@ export async function decrementCredit(
   await kv.set(k, updated);
   return { ok: true, remaining: updated.credits };
 }
+
+/**
+ * Restore 1 credit when a student cancels a pack class.
+ * Capped at the original pack size so credits can never exceed what was purchased.
+ * Returns ok:false if the student has no record or their pack has expired.
+ */
+export async function restoreCredit(
+  email: string
+): Promise<{ ok: boolean; credits: number }> {
+  const k = key(email);
+  const record = await kv.get<CreditRecord>(k);
+
+  if (!record) return { ok: false, credits: 0 };
+  if (isExpired(record.expiresAt)) return { ok: false, credits: 0 };
+
+  const packSize = record.packSize ?? parsePackSize(record.packLabel) ?? 0;
+  const restored = Math.min(record.credits + 1, packSize);
+
+  const updated: CreditRecord = {
+    ...record,
+    credits: restored,
+    lastUpdated: new Date().toISOString(),
+  };
+
+  await kv.set(k, updated);
+  console.info(`[kv] Credit restored: ${email} credits=${restored}`);
+  return { ok: true, credits: restored };
+}
