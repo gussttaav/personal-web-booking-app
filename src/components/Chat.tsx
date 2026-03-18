@@ -92,6 +92,16 @@ export default function Chat() {
     }
   }, [isOpen]);
 
+  // ── Listen for the custom "open-chat" event dispatched by TrustBar ──────────
+  useEffect(() => {
+    function handleOpenChat() {
+      setIsOpen(true);
+      setShowDot(false);
+    }
+    window.addEventListener("open-chat", handleOpenChat);
+    return () => window.removeEventListener("open-chat", handleOpenChat);
+  }, []);
+
   function togglePanel() {
     setIsOpen((prev) => !prev);
     setShowDot(false);

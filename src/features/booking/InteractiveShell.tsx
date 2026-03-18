@@ -192,7 +192,7 @@ export default function InteractiveShell() {
       )}
 
       {/* Sessions section */}
-      <section style={{ animation: "fadeUp 0.6s ease both 0.45s" }}>
+      <section id="sessions" style={{ animation: "fadeUp 0.6s ease both 0.45s" }}>
         <h2
           style={{
             fontFamily: "var(--font-serif), 'DM Serif Display', serif",
@@ -241,7 +241,7 @@ export default function InteractiveShell() {
       />
 
       {/* Packs section */}
-      <section style={{ animation: "fadeUp 0.6s ease both 0.55s" }}>
+      <section id="packs" style={{ animation: "fadeUp 0.6s ease both 0.55s" }}>
         <h2
           style={{
             fontFamily: "var(--font-serif), 'DM Serif Display', serif",
