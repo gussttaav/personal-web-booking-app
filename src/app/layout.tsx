@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Sans, DM_Serif_Display } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import AuthProvider from "@/components/AuthProvider";
 import "./globals.css";
 
@@ -40,6 +41,7 @@ export default function RootLayout({
     <html lang="es" className={`${dmSans.variable} ${dmSerifDisplay.variable}`}>
       <body className={dmSans.className}>
         <AuthProvider>{children}</AuthProvider>
+        <Analytics />
       </body>
     </html>
   );
