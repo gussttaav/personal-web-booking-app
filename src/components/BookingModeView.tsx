@@ -36,22 +36,20 @@ export default function BookingModeView({
   const [meetLink,   setMeetLink]   = useState("");
   const [selected,   setSelected]   = useState<SelectedSlot | null>(null);
 
-  const handleSlotSelected = useCallback((slot: SelectedSlot) => {
+  const handleSlotSelected = useCallback(async (slot: SelectedSlot) => {
     setSelected(slot);
-  }, []);
-
-  const handleConfirm = useCallback(async () => {
-    if (!selected) return;
     setPhase("confirming");
 
     try {
-      const res  = await fetch("/api/book", {
+      const res = await fetch("/api/book", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
-          startIso:    selected.startIso,
-          endIso:      selected.endIso,
+          startIso:    slot.startIso,
+          endIso:      slot.endIso,
           sessionType: "pack",
+          note:        slot.note,
+          timezone:    slot.timezone,
         }),
       });
       const data = await res.json();
@@ -62,14 +60,13 @@ export default function BookingModeView({
       const newRemaining = credData.credits ?? (remaining - 1);
 
       setRemaining(newRemaining);
-      setMeetLink(data.meetLink ?? "");
       setPhase("success");
       onCreditsUpdated(newRemaining);
     } catch (err) {
       setErrMsg(err instanceof ApiError ? err.message : "Error al registrar la reserva.");
       setPhase("error");
     }
-  }, [selected, remaining, onCreditsUpdated]);
+  }, [remaining, onCreditsUpdated]);
 
   function bookAnother() {
     setPhase("idle");
@@ -96,18 +93,9 @@ export default function BookingModeView({
             <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 24 }}>
               {selected?.dateLabel} · {selected?.label}
             </p>
-
-            {meetLink && (
-              <a href={meetLink} target="_blank" rel="noopener noreferrer" style={{
-                display: "inline-flex", alignItems: "center", gap: 8,
-                padding: "11px 22px", borderRadius: 8,
-                background: "var(--green)", color: "#0d0f10",
-                fontSize: 14, fontWeight: 600, textDecoration: "none",
-                marginBottom: 20,
-              }}>
-                Abrir Google Meet →
-              </a>
-            )}
+            <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>
+              Recibirás el enlace de Google Meet y la confirmación por email.
+            </p>
 
             <div style={{
               background: "var(--surface)", border: "1px solid var(--border)",
@@ -251,15 +239,6 @@ export default function BookingModeView({
                 onSlotSelected={handleSlotSelected}
                 selectedSlot={selected}
               />
-
-              {/* Confirmation panel */}
-              {selected && (
-                <ConfirmPanel
-                  slot={selected}
-                  onConfirm={handleConfirm}
-                  packInfo={{ remaining }}
-                />
-              )}
             </>
           )}
         </div>

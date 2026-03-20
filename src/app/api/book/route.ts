@@ -32,6 +32,8 @@ const BookSchema = z.object({
   startIso:    z.string().datetime(),
   endIso:      z.string().datetime(),
   sessionType: z.enum(["free15min", "session1h", "session2h", "pack"]),
+  note:        z.string().max(1000).optional(),
+  timezone:    z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -52,7 +54,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Datos de reserva inválidos" }, { status: 400 });
   }
 
-  const { startIso, endIso, sessionType } = body;
+  const { startIso, endIso, sessionType, note, timezone } = body;
 
   // ── Validate slot is in the future ────────────────────────────────────────
   const startsAt    = new Date(startIso);
@@ -81,7 +83,12 @@ export async function POST(req: NextRequest) {
   try {
     const result = await createCalendarEvent({
       summary:     `${sessionLabel} — ${name}`,
-      description: `Alumno: ${name} (${email})\nTipo: ${sessionLabel}\ngustavoai.dev`,
+      description: [
+        `Alumno: ${name} (${email})`,
+        `Tipo: ${sessionLabel}`,
+        note ? `Motivo: ${note}` : null,
+        `gustavoai.dev`,
+      ].filter(Boolean).join("\n"),
       startIso,
       endIso,
     });
@@ -110,7 +117,7 @@ export async function POST(req: NextRequest) {
     endsAt:   endIso,
   });
 
-  // ── Send emails (non-blocking — don't fail the booking if email fails) ────
+  // ── Send emails (non-blocking) ────────────────────────────────────────────
   Promise.all([
     sendConfirmationEmail({
       to:           email,
@@ -120,6 +127,9 @@ export async function POST(req: NextRequest) {
       endIso,
       meetLink,
       cancelToken,
+      note:         note ?? null,
+      studentTz:    timezone ?? null,
+      sessionType,
     }),
     sendNewBookingNotificationEmail({
       studentEmail: email,
@@ -128,13 +138,9 @@ export async function POST(req: NextRequest) {
       startIso,
       endIso,
       meetLink,
+      note:         note ?? null,
     }),
   ]).catch((err) => console.error("[book] Email send failed (non-fatal):", err));
 
-  return NextResponse.json({
-    ok: true,
-    eventId,
-    meetLink,
-    cancelToken,
-  });
+  return NextResponse.json({ ok: true, eventId, meetLink, cancelToken });
 }

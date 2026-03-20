@@ -2,17 +2,52 @@
  * lib/booking-config.ts
  *
  * Booking schedule configuration.
- * Kept in a separate file from calendar.ts so client components
- * (SlotPicker, availability route) can import it without pulling
- * in googleapis and its Node.js built-ins (fs, net, child_process).
+ * Kept separate from calendar.ts so client components can import it
+ * without pulling in googleapis and Node.js built-ins.
  */
 
+export interface DaySchedule {
+  /** Morning block end hour (exclusive) */
+  morningEnd: number;
+  /** Afternoon block start hour (inclusive), or null if no afternoon */
+  afternoonStart: number | null;
+  /** Afternoon block end hour (exclusive), or null if no afternoon */
+  afternoonEnd: number | null;
+}
+
+/**
+ * Per-day schedule.
+ * 0 = Sunday, 1 = Monday … 6 = Saturday
+ *
+ * Monday–Friday:    09:00–13:45
+ * Mon & Wed:        +15:00–17:00
+ * Tue, Thu, Fri:    +15:00–19:00
+ * Saturday:         11:00–15:00
+ * Sunday:           11:00–15:00
+ */
+export const DAY_SCHEDULES: Record<number, DaySchedule | null> = {
+  0: { morningEnd: 15, afternoonStart: null, afternoonEnd: null },  // Sun  11–15
+  1: { morningEnd: 14, afternoonStart: 15,   afternoonEnd: 17 },    // Mon  09–13:45 + 15–17
+  2: { morningEnd: 14, afternoonStart: 15,   afternoonEnd: 19 },    // Tue  09–13:45 + 15–19
+  3: { morningEnd: 14, afternoonStart: 15,   afternoonEnd: 17 },    // Wed  09–13:45 + 15–17
+  4: { morningEnd: 14, afternoonStart: 15,   afternoonEnd: 19 },    // Thu  09–13:45 + 15–19
+  5: { morningEnd: 14, afternoonStart: 15,   afternoonEnd: 19 },    // Fri  09–13:45 + 15–19
+  6: { morningEnd: 15, afternoonStart: null, afternoonEnd: null },  // Sat  11–15
+};
+
+/** Start hour for weekdays (Mon–Fri) */
+const WEEKDAY_START = 9;
+/** Start hour for weekend */
+const WEEKEND_START = 11;
+
+/** Returns the start hour for a given day-of-week (0=Sun…6=Sat) */
+export function dayStartHour(dow: number): number {
+  return (dow === 0 || dow === 6) ? WEEKEND_START : WEEKDAY_START;
+}
+
 export const SCHEDULE = {
-  /** 0 = Sunday … 6 = Saturday */
+  /** All days are working days — per-day schedule controls actual hours */
   workingDays: [0, 1, 2, 3, 4, 5, 6] as number[],
-  startHour: 9,
-  endHour: 19,
-  breaks: [{ start: 14, end: 15 }],
   bookingWindowWeeks: 8,
   minNoticeHours: 2,
   timezone: "Europe/Madrid",

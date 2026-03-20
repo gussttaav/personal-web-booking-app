@@ -1,4 +1,6 @@
 /**
+ * lib/calendar.ts
+ *
  * Google Calendar API integration.
  *
  * Responsibilities:
@@ -17,7 +19,7 @@
 import { google } from "googleapis";
 import { Redis } from "@upstash/redis";
 import crypto from "crypto";
-import { SCHEDULE } from "@/lib/booking-config";
+import { SCHEDULE, DAY_SCHEDULES, dayStartHour } from "@/lib/booking-config";
 
 export { SCHEDULE }; // re-export so existing imports of SCHEDULE from calendar.ts still work
 
@@ -60,30 +62,6 @@ export interface BookingRecord {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function toMadridDate(date: Date): Date {
-  // Returns a Date object adjusted for Europe/Madrid offset
-  const str = date.toLocaleString("en-CA", {
-    timeZone: SCHEDULE.timezone,
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-  return new Date(str.replace(",", ""));
-}
-
-function madridMidnight(dateStr: string): Date {
-  // Returns a UTC Date representing midnight in Madrid for the given YYYY-MM-DD
-  return new Date(`${dateStr}T00:00:00+01:00`);
-}
-
-function isInBreak(hour: number): boolean {
-  return SCHEDULE.breaks.some((b) => hour >= b.start && hour < b.end);
-}
-
 function formatTime(date: Date): string {
   return date.toLocaleTimeString("es-ES", {
     timeZone: SCHEDULE.timezone,
@@ -101,13 +79,32 @@ function formatTime(date: Date): string {
  * the working hours window.
  */
 export async function getAvailableSlots(
-  dateStr: string,   // YYYY-MM-DD
+  dateStr: string,
   durationMinutes: number
 ): Promise<TimeSlot[]> {
-  const dayStart = new Date(`${dateStr}T${String(SCHEDULE.startHour).padStart(2, "0")}:00:00`);
-  const dayEnd   = new Date(`${dateStr}T${String(SCHEDULE.endHour).padStart(2, "0")}:00:00`);
+  // Determine Madrid day-of-week for this date
+  const dow = new Date(`${dateStr}T12:00:00`).getDay(); // 0=Sun…6=Sat
+  const daySched = DAY_SCHEDULES[dow];
+  if (!daySched) return [];
 
-  // Use Europe/Madrid offset for the query window
+  const startHour = dayStartHour(dow);
+
+  // Build the valid time windows for this day
+  // Morning: startHour → daySched.morningEnd (exclusive)
+  // Afternoon: daySched.afternoonStart → daySched.afternoonEnd (if present)
+  // The 13:45 cutoff is handled by the slot end not exceeding morningEnd*60 minutes
+  const MORNING_END_MINUTES  = daySched.morningEnd * 60 - 15; // 13:45 = 825 min from midnight
+  const windows: { startMin: number; endMin: number }[] = [
+    { startMin: startHour * 60, endMin: MORNING_END_MINUTES },
+  ];
+  if (daySched.afternoonStart !== null && daySched.afternoonEnd !== null) {
+    windows.push({
+      startMin: daySched.afternoonStart * 60,
+      endMin:   daySched.afternoonEnd * 60,
+    });
+  }
+
+  // Freebusy query for the full day
   const timeMin = new Date(`${dateStr}T00:00:00+01:00`).toISOString();
   const timeMax = new Date(`${dateStr}T23:59:59+01:00`).toISOString();
 
@@ -123,60 +120,37 @@ export async function getAvailableSlots(
 
   const busyBlocks = freebusyRes.data.calendars?.[CALENDAR_ID]?.busy ?? [];
 
-  // Build candidate slots at 1h intervals across the working day
   const slots: TimeSlot[] = [];
   const now = new Date();
   const minBookingTime = new Date(now.getTime() + SCHEDULE.minNoticeHours * 60 * 60 * 1000);
 
-  let cursor = new Date(dayStart);
+  // Iterate over each time window and generate slots
+  for (const window of windows) {
+    // Start cursor at window start (in UTC, using Madrid offset)
+    let cursorMin = window.startMin;
 
-  while (cursor.getTime() + durationMinutes * 60_000 <= dayEnd.getTime()) {
-    const slotStart = new Date(cursor);
-    const slotEnd   = new Date(cursor.getTime() + durationMinutes * 60_000);
+    while (cursorMin + durationMinutes <= window.endMin) {
+      const slotStart = new Date(`${dateStr}T${String(Math.floor(cursorMin / 60)).padStart(2, "0")}:${String(cursorMin % 60).padStart(2, "0")}:00+01:00`);
+      const slotEnd   = new Date(slotStart.getTime() + durationMinutes * 60_000);
 
-    const madridHour = parseInt(
-      slotStart.toLocaleTimeString("es-ES", {
-        timeZone: SCHEDULE.timezone,
-        hour: "2-digit",
-        hour12: false,
-      }),
-      10
-    );
-
-    const overlapsBreak = SCHEDULE.breaks.some(
-      (b) => madridHour >= b.start && madridHour < b.end
-    );
-
-    const overlapsBreakEnd = SCHEDULE.breaks.some((b) => {
-      const endHour = parseInt(
-        slotEnd.toLocaleTimeString("es-ES", {
-          timeZone: SCHEDULE.timezone,
-          hour: "2-digit",
-          hour12: false,
-        }),
-        10
-      );
-      return madridHour < b.end && endHour > b.start;
-    });
-
-    const overlapsBusy = busyBlocks.some((block) => {
-      const bStart = new Date(block.start!);
-      const bEnd   = new Date(block.end!);
-      return slotStart < bEnd && slotEnd > bStart;
-    });
-
-    const tooSoon = slotStart < minBookingTime;
-
-    if (!overlapsBreak && !overlapsBreakEnd && !overlapsBusy && !tooSoon) {
-      slots.push({
-        start: slotStart.toISOString(),
-        end:   slotEnd.toISOString(),
-        label: formatTime(slotStart),
+      const overlapsBusy = busyBlocks.some((block) => {
+        const bStart = new Date(block.start!);
+        const bEnd   = new Date(block.end!);
+        return slotStart < bEnd && slotEnd > bStart;
       });
-    }
 
-    // Advance by the session duration (not always 1h)
-    cursor = new Date(cursor.getTime() + durationMinutes * 60_000);
+      const tooSoon = slotStart < minBookingTime;
+
+      if (!overlapsBusy && !tooSoon) {
+        slots.push({
+          start: slotStart.toISOString(),
+          end:   slotEnd.toISOString(),
+          label: formatTime(slotStart),
+        });
+      }
+
+      cursorMin += durationMinutes;
+    }
   }
 
   return slots;

@@ -15,7 +15,6 @@ import { api, ApiError } from "@/lib/api-client";
 import WeeklyCalendar, { type SelectedSlot } from "@/components/WeeklyCalendar";
 import {
   FullScreenShell,
-  ConfirmPanel,
   TutorRow,
   InfoRow,
   MetaRows,
@@ -44,17 +43,12 @@ export default function SingleSessionBooking({
   const router = useRouter();
   const cfg = SESSION_CONFIGS[sessionType];
 
-  const [phase,      setPhase]      = useState<Phase>("picking");
-  const [errorMsg,   setErrorMsg]   = useState("");
-  const [meetLink,   setMeetLink]   = useState("");
-  const [selected,   setSelected]   = useState<SelectedSlot | null>(null);
+  const [phase,    setPhase]    = useState<Phase>("picking");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [selected, setSelected] = useState<SelectedSlot | null>(null);
 
-  const handleSlotSelected = useCallback((slot: SelectedSlot) => {
+  const handleSlotSelected = useCallback(async (slot: SelectedSlot) => {
     setSelected(slot);
-  }, []);
-
-  const handleConfirm = useCallback(async () => {
-    if (!selected) return;
 
     if (sessionType === "free15min") {
       setPhase("booking");
@@ -63,14 +57,15 @@ export default function SingleSessionBooking({
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify({
-            startIso:    selected.startIso,
-            endIso:      selected.endIso,
+            startIso:    slot.startIso,
+            endIso:      slot.endIso,
             sessionType: "free15min",
+            note:        slot.note,
+            timezone:    slot.timezone,
           }),
         });
         const data = await res.json();
         if (!res.ok) throw new ApiError(data.error ?? "Error al reservar", res.status);
-        setMeetLink(data.meetLink ?? "");
         setPhase("success");
       } catch (err) {
         setErrorMsg(err instanceof ApiError ? err.message : "Error al reservar.");
@@ -85,15 +80,15 @@ export default function SingleSessionBooking({
       const duration = sessionType === "session1h" ? "1h" : "2h";
       const data = await api.stripe.checkoutSingleSession({
         duration,
-        startIso: selected.startIso,
-        endIso:   selected.endIso,
+        startIso: slot.startIso,
+        endIso:   slot.endIso,
       });
       window.location.href = data.url;
     } catch (err) {
       setErrorMsg(err instanceof ApiError ? err.message : "Error al iniciar el pago.");
       setPhase("error");
     }
-  }, [selected, sessionType]);
+  }, [sessionType]);
 
   const badgeType  = sessionType === "free15min" ? "free" : "paid";
   const badgeLabel = cfg.label;
@@ -114,25 +109,11 @@ export default function SingleSessionBooking({
             <h2 style={{ fontSize: 22, fontWeight: 500, color: "var(--text)", marginBottom: 6 }}>
               ¡Encuentro reservado!
             </h2>
-            <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 24 }}>
+            <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 16 }}>
               {selected?.dateLabel} · {selected?.label}
             </p>
-
-            {meetLink && (
-              <a href={meetLink} target="_blank" rel="noopener noreferrer" style={{
-                display: "inline-flex", alignItems: "center", gap: 8,
-                padding: "11px 22px", borderRadius: 8,
-                background: "var(--green)", color: "#0d0f10",
-                fontSize: 14, fontWeight: 600, textDecoration: "none",
-                marginBottom: 20,
-              }}>
-                Abrir Google Meet →
-              </a>
-            )}
-
             <p style={{ fontSize: 13, color: COLORS.textSecondary, marginBottom: 20 }}>
-              Recibirás un email de confirmación con el enlace de Google Meet
-              y la opción de cancelar si lo necesitas.
+              Recibirás el enlace de la reunión y la confirmación por email.
             </p>
 
             <button onClick={onBack} style={secondaryBtnStyle}>Volver al inicio</button>
@@ -224,14 +205,6 @@ export default function SingleSessionBooking({
                 onSlotSelected={handleSlotSelected}
                 selectedSlot={selected}
               />
-
-              {selected && (
-                <ConfirmPanel
-                  slot={selected}
-                  onConfirm={handleConfirm}
-                  sessionDuration={cfg.duration}
-                />
-              )}
             </>
           )}
         </div>
