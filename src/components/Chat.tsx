@@ -7,6 +7,8 @@ import {
   useCallback,
   type KeyboardEvent,
 } from "react";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { GeminiMessage } from "@/lib/gemini";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -48,22 +50,70 @@ function toGeminiHistory(messages: Message[]): GeminiMessage[] {
     }));
 }
 
+// Custom components for markdown rendering
+const MarkdownComponents = {
+  // Style lists properly
+  ul: ({ node, ...props }: any) => (
+    <ul style={{ margin: '8px 0', paddingLeft: '24px', listStyleType: 'disc' }} {...props} />
+  ),
+  ol: ({ node, ...props }: any) => (
+    <ol style={{ margin: '8px 0', paddingLeft: '24px', listStyleType: 'decimal' }} {...props} />
+  ),
+  li: ({ node, ...props }: any) => (
+    <li style={{ margin: '4px 0', lineHeight: '1.5' }} {...props} />
+  ),
+  // Style headings
+  h1: ({ node, ...props }: any) => (
+    <h1 style={{ margin: '12px 0 6px 0', fontSize: '18px', fontWeight: 600, color: 'var(--text)' }} {...props} />
+  ),
+  h2: ({ node, ...props }: any) => (
+    <h2 style={{ margin: '12px 0 6px 0', fontSize: '16px', fontWeight: 600, color: 'var(--text)' }} {...props} />
+  ),
+  h3: ({ node, ...props }: any) => (
+    <h3 style={{ margin: '12px 0 6px 0', fontSize: '14px', fontWeight: 600, color: 'var(--text)' }} {...props} />
+  ),
+  // Style paragraphs
+  p: ({ node, ...props }: any) => (
+    <p style={{ margin: '0 0 8px 0', lineHeight: '1.5' }} {...props} />
+  ),
+  // Style bold text
+  strong: ({ node, ...props }: any) => (
+    <strong style={{ color: 'var(--text)', fontWeight: 500 }} {...props} />
+  ),
+  // Style code blocks
+  code: ({ node, inline, ...props }: any) => {
+    if (inline) {
+      return <code style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 4px', borderRadius: '4px', fontFamily: 'monospace', fontSize: '12px' }} {...props} />;
+    }
+    return (
+      <pre style={{ background: 'rgba(255,255,255,0.06)', padding: '8px 12px', borderRadius: '8px', overflowX: 'auto', margin: '8px 0' }}>
+        <code style={{ background: 'none', padding: 0 }} {...props} />
+      </pre>
+    );
+  },
+  // Style links
+  a: ({ node, ...props }: any) => (
+    <a style={{ color: 'var(--green)', textDecoration: 'none' }} target="_blank" rel="noopener noreferrer" {...props} />
+  ),
+  // Style blockquotes
+  blockquote: ({ node, ...props }: any) => (
+    <blockquote style={{ borderLeft: '2px solid var(--green)', paddingLeft: '12px', margin: '8px 0', color: 'var(--text-dim)' }} {...props} />
+  ),
+};
+
 /**
- * Renders simple markdown-like formatting in bot messages.
- * Only handles **bold** — safe, no dangerouslySetInnerHTML needed.
+ * Renders Markdown content safely with custom components.
  */
-function BotText({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+function BotMessage({ text }: { text: string }) {
   return (
-    <>
-      {parts.map((part, i) =>
-        part.startsWith("**") && part.endsWith("**") ? (
-          <strong key={i}>{part.slice(2, -2)}</strong>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
-    </>
+    <div className="chat-bot-message">
+      <ReactMarkdown 
+        remarkPlugins={[remarkGfm]}
+        components={MarkdownComponents}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
   );
 }
 
@@ -208,7 +258,7 @@ export default function Chat() {
               key={i}
               className={`chat-msg chat-msg--${msg.role}`}
             >
-              {msg.role === "bot" ? <BotText text={msg.text} /> : msg.text}
+              {msg.role === "bot" ? <BotMessage text={msg.text} /> : msg.text}
             </div>
           ))}
 
