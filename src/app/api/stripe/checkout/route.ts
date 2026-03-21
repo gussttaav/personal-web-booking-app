@@ -12,11 +12,11 @@ const PackCheckoutSchema = z.object({
 });
 
 const SingleCheckoutSchema = z.object({
-  type:     z.literal("single"),
-  duration: z.enum(["1h", "2h"]),
-  // Slot timing stored in Stripe metadata so the webhook can create the event
-  startIso: z.string().datetime(),
-  endIso:   z.string().datetime(),
+  type:            z.literal("single"),
+  duration:        z.enum(["1h", "2h"]),
+  startIso:        z.string().datetime(),
+  endIso:          z.string().datetime(),
+  rescheduleToken: z.string().optional(),
 });
 
 const CheckoutBodySchema = z.discriminatedUnion("type", [
@@ -119,12 +119,13 @@ export async function POST(req: NextRequest) {
       customer_email: email,
       line_items:     [{ price: getSingleSessionPriceId(body.duration), quantity: 1 }],
       metadata: {
-        student_name:     name,
-        student_email:    email,
-        checkout_type:    "single",
-        session_duration: body.duration,
-        start_iso:        body.startIso,
-        end_iso:          body.endIso,
+        student_name:      name,
+        student_email:     email,
+        checkout_type:     "single",
+        session_duration:  body.duration,
+        start_iso:         body.startIso,
+        end_iso:           body.endIso,
+        reschedule_token:  body.rescheduleToken ?? "",
       },
       success_url: `${baseUrl}/sesion-confirmada?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${baseUrl}/?cancelled=true`,

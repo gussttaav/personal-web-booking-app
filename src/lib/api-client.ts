@@ -42,17 +42,19 @@ export const api = {
       }),
 
     checkoutSingleSession: (params: {
-      duration: "1h" | "2h";
-      startIso: string;
-      endIso:   string;
+      duration:         "1h" | "2h";
+      startIso:         string;
+      endIso:           string;
+      rescheduleToken?: string;
     }) =>
       request<CheckoutResponse>("/api/stripe/checkout", {
         method: "POST",
         body:   JSON.stringify({
-          type:     "single",
-          duration: params.duration,
-          startIso: params.startIso,
-          endIso:   params.endIso,
+          type:            "single",
+          duration:        params.duration,
+          startIso:        params.startIso,
+          endIso:          params.endIso,
+          rescheduleToken: params.rescheduleToken,
         }),
       }),
   },

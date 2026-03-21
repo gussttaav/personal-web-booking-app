@@ -29,11 +29,12 @@ const SESSION_LABELS: Record<string, string> = {
 };
 
 const BookSchema = z.object({
-  startIso:    z.string().datetime(),
-  endIso:      z.string().datetime(),
-  sessionType: z.enum(["free15min", "session1h", "session2h", "pack"]),
-  note:        z.string().max(1000).optional(),
-  timezone:    z.string().optional(),
+  startIso:        z.string().datetime(),
+  endIso:          z.string().datetime(),
+  sessionType:     z.enum(["free15min", "session1h", "session2h", "pack"]),
+  note:            z.string().max(1000).optional(),
+  timezone:        z.string().optional(),
+  rescheduleToken: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -54,7 +55,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Datos de reserva inválidos" }, { status: 400 });
   }
 
-  const { startIso, endIso, sessionType, note, timezone } = body;
+  const { startIso, endIso, sessionType, note, timezone, rescheduleToken } = body;
+
+  // ── Reschedule: clean up old booking first ────────────────────────────────
+  // If a rescheduleToken is provided, verify it, delete the old calendar event,
+  // and restore the pack credit so the new booking doesn't cost an extra credit.
+  if (rescheduleToken) {
+    const {
+      verifyCancellationToken,
+      consumeCancellationToken,
+      deleteCalendarEvent,
+    } = await import("@/lib/calendar");
+
+    const oldBooking = await verifyCancellationToken(rescheduleToken);
+    if (oldBooking) {
+      // Delete old calendar event (best-effort — don't fail if already gone)
+      try { await deleteCalendarEvent(oldBooking.record.eventId); } catch {}
+
+      // Restore credit if the old booking was a pack session
+      if (oldBooking.record.sessionType === "pack") {
+        const { restoreCredit } = await import("@/lib/kv");
+        await restoreCredit(email);
+      }
+
+      // Consume the token so it can't be used again
+      await consumeCancellationToken(rescheduleToken);
+    }
+  }
 
   // ── Validate slot is in the future ────────────────────────────────────────
   const startsAt    = new Date(startIso);

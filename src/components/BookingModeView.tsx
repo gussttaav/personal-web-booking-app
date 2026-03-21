@@ -19,6 +19,7 @@ type BookingPhase = "idle" | "confirming" | "success" | "error";
 
 interface BookingModeViewProps {
   student: StudentInfo;
+  rescheduleToken?: string | null;
   onCreditsUpdated: (remaining: number) => void;
   onExit: () => void;
   hideTopBar?: boolean;
@@ -26,6 +27,7 @@ interface BookingModeViewProps {
 
 export default function BookingModeView({
   student,
+  rescheduleToken,
   onCreditsUpdated,
   onExit,
   hideTopBar = false,
@@ -46,11 +48,12 @@ export default function BookingModeView({
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
-          startIso:    slot.startIso,
-          endIso:      slot.endIso,
-          sessionType: "pack",
-          note:        slot.note,
-          timezone:    slot.timezone,
+          startIso:        slot.startIso,
+          endIso:          slot.endIso,
+          sessionType:     "pack",
+          note:            slot.note,
+          timezone:        slot.timezone,
+          rescheduleToken: rescheduleToken ?? undefined,
         }),
       });
       const data = await res.json();

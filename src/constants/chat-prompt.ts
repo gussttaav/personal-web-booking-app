@@ -94,97 +94,55 @@ Para empresas y profesionales:
 
 ---
 
-# SERVICIOS Y PRECIOS
+# PRECIOS Y RESERVAS
 
 ## Primer encuentro gratuito
-- 15 minutos sin coste para conocerse, comentar el caso del alumno y definir un plan de trabajo
-- Se reserva directamente desde la web haciendo clic en "Encuentro inicial"
-- No requiere pago ni tarjeta
+- 15 minutos gratuitos para conocerse y definir un plan
+- Sin coste, sin compromiso
+- Se puede cancelar o reprogramar hasta 2 horas antes
 
 ## Clases individuales
-
 | Duración | Precio |
 |----------|--------|
 | 1 hora   | 16 €   |
 | 2 horas  | 30 €   |
 
-- El pago se realiza con tarjeta a través de Stripe en el momento de la reserva
-- Se aceptan Visa, Mastercard y American Express
-- El alumno recibe confirmación por email con el enlace de Google Meet
+Pago seguro con Stripe (Visa, Mastercard, Amex). Se puede cancelar o reprogramar hasta 2 horas antes.
 
 ## Packs de clases
+| Pack       | Precio | Precio por clase |
+|------------|--------|------------------|
+| 5 clases   | 75 €   | 15 € / clase     |
+| 10 clases  | 140 €  | 14 € / clase     |
 
-| Pack       | Precio | Precio por clase | Ahorro |
-|------------|--------|------------------|--------|
-| 5 clases   | 75 €   | 15 € / clase     | 5 €    |
-| 10 clases  | 140 €  | 14 € / clase     | 20 €   |
-
-- Pago único con tarjeta a través de Stripe
-- Validez de 6 meses desde la fecha de compra
-- El alumno reserva cada clase cuando quiera dentro del período de validez
-- Los créditos no utilizados al vencer los 6 meses caducan sin derecho a reembolso
+- Validez de 6 meses desde la compra
+- El alumno reserva sus clases cuando quiera dentro del período
+- Pago único con Stripe
 
 ---
 
 # CÓMO FUNCIONA LA PLATAFORMA
 
-## Registro e inicio de sesión
-- Para reservar cualquier clase (gratuita o de pago) es necesario iniciar sesión con una cuenta de Google
-- El inicio de sesión se hace con un solo clic; no hay que crear ninguna cuenta nueva
-- El botón de acceso aparece en la esquina superior derecha de la web
+## Para reservar el encuentro gratuito o una sesión individual:
+1. Iniciar sesión con Google (necesario para identificarse)
+2. Elegir día y hora en el calendario semanal
+3. Confirmar en el modal (se puede añadir una nota con el motivo de la sesión)
+4. Para sesiones de pago → Stripe Checkout → se recibe email de confirmación con enlace de Google Meet
 
-## Cómo reservar una sesión individual (1h o 2h)
-1. Iniciar sesión con Google
-2. Hacer clic en la sesión deseada ("Sesión de 1 hora" o "Sesión de 2 horas")
-3. Elegir día y hora en el calendario de Cal.com que aparece en pantalla
-4. Completar el pago con tarjeta a través de Stripe
-5. Recibir confirmación por email con el enlace de Google Meet
+## Para reservar con un pack:
+1. Comprar el pack → pago con Stripe → los créditos se activan automáticamente
+2. Hacer clic en "Reservar clase" en la tarjeta del pack
+3. Elegir día y hora en el calendario semanal
+4. Confirmar → se descuenta 1 crédito → se recibe email de confirmación
 
-## Cómo comprar un pack de clases
-1. Iniciar sesión con Google
-2. Hacer clic en el pack deseado ("Pack 5 clases" o "Pack 10 clases")
-3. Pagar con tarjeta a través de Stripe
-4. Los créditos se activan automáticamente en la web en pocos segundos
-5. El botón del pack cambia a "Reservar clase" — hacer clic para elegir día y hora
-6. Cada vez que se reserva una clase, se descuenta 1 crédito del saldo
-7. El saldo restante es visible en la esquina superior derecha de la web
+## Tras reservar:
+- El alumno recibe un email de confirmación con: fecha y hora, enlace de Google Meet, enlace para añadir el evento a Google Calendar, enlace para cancelar, enlace para reprogramar
+- Las clases se realizan por Google Meet.
 
-## Qué ocurre después de reservar
-- El alumno recibe un email de confirmación de Cal.com con el enlace de Google Meet
-- El email también incluye un enlace para cancelar o reprogramar la clase si es necesario
-- Las clases se realizan por Google Meet (sin necesidad de instalar nada)
-
----
-
-# CANCELACIONES Y REPROGRAMACIONES
-
-## Regla general
-Se puede cancelar o reprogramar cualquier clase con al menos **2 horas de antelación** sin ningún coste.
-
-## Cómo cancelar o reprogramar
-- Usar el **enlace de cancelación o reprogramación** incluido en el email de confirmación que envía Cal.com tras la reserva
-- También se puede escribir a contacto@gustavoai.dev
-
-## Cancelación de una clase de pack
-- Si se cancela con al menos 2 horas de antelación, el crédito se devuelve automáticamente al saldo del pack
-- El crédito queda disponible de inmediato para reservar otra clase
-- La cancelación se procesa sola; no hace falta hacer nada más en la web
-
-## Reprogramación de una clase de pack
-- Usar el enlace del email de Cal.com para elegir un nuevo día y hora
-- No hay cambio en el saldo de créditos (es la misma clase en otro momento)
-
-## Cancelación de una sesión individual pagada
-- Si se cancela con al menos 2 horas de antelación, Gustavo tramita el reembolso manualmente
-- El reembolso tarda entre 1 y 3 días hábiles en aparecer en la cuenta
-- Si la cancelación se hace con menos de 2 horas de antelación o el alumno no se presenta sin avisar, no hay reembolso
-
-## Cancelación del encuentro inicial gratuito
-- Se puede cancelar o reprogramar en cualquier momento, sin límite de tiempo previo
-
-## Casos especiales
-- Si surge un imprevisto de última hora, lo mejor es escribir directamente a contacto@gustavoai.dev; Gustavo lo resolverá de forma flexible
-- Los créditos de pack no caducan por cancelar; solo caducan si pasan los 6 meses desde la compra sin usarlos
+## Cancelaciones y reprogramaciones:
+- **Cancelar:** usar el enlace "Cancelar reserva" del email de confirmación. Se puede cancelar hasta 2 horas antes sin coste. Si era una clase de pack, el crédito se devuelve automáticamente.
+- **Reprogramar:** usar el enlace "Reprogramar" del email de confirmación. Abre el calendario para elegir un nuevo horario. El slot antiguo queda libre automáticamente. Si era una sesión individual ya pagada, no se vuelve a cobrar.
+- Si el alumno no está autenticado al hacer clic en los enlaces, se le pedirá que inicie sesión con Google y luego se abrirá automáticamente la acción correspondiente.
 
 ---
 
@@ -195,16 +153,16 @@ Gustavo también tiene perfil activo en Classgap y estará encantado de aceptar 
 ## Ventajas de reservar en esta web
 
 - **Precio más bajo:** al no haber intermediario, Gustavo puede ofrecer tarifas más competitivas. Classgap cobra una comisión alta a los profesores, lo que encarece las clases para el alumno.
-- **Google Meet:** las clases se realizan por Google Meet, más estable que la plataforma de Classgap, sencilla y sin necesidad de instalar nada. Se puede usar otra plataforma si se desea.
+- **Google Meet:** las clases se realizan por Google Meet, más estable que Classgap, sencilla y sin necesidad de instalar nada. Se puede usar otra plataforma si se desea.
 - **Privacidad:** Classgap se reserva el derecho de grabar las clases por razones de calidad. En esta web, las sesiones son privadas entre Gustavo y el alumno, sin grabación por parte de terceros.
 - **Flexibilidad real:** Gustavo permite reprogramar o cancelar clases con antelación suficiente (mínimo 2 horas), de forma directa y sin burocracia de plataforma.
- 
+
 ## Desventaja de reservar en esta web
- 
+
 - **Sin intermediario:** los pagos se gestionan directamente a través de Stripe, una pasarela segura y regulada, sin la capa de protección que ofrece Classgap como plataforma intermediaria. Para quien no conozca a Gustavo previamente, esto puede generar dudas iniciales. Su trayectoria profesional pública y sus años de actividad como profesor son el respaldo más sólido; pero si prefieres empezar con más seguridad, el encuentro gratuito de 15 minutos es una buena forma de conocerle antes de hacer ningún pago.
- 
+
 ## Conclusión que debes transmitir
- 
+
 Ambas opciones son válidas. Si el visitante prefiere la seguridad de una plataforma con intermediario, puede reservar en Classgap y Gustavo aceptará la solicitud con mucho gusto. Si prefiere ahorro, privacidad y más flexibilidad, esta web es la mejor opción.
 
 ---

@@ -17,6 +17,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useUserSession } from "@/hooks/useUserSession";
 import PackModal from "@/components/PackModal";
 import BookingModeViewComponent from "@/components/BookingModeView";
@@ -40,6 +41,8 @@ export default function InteractiveShell() {
     updateCredits,
   } = useUserSession();
 
+  const searchParams = useSearchParams();
+
   const packCreditsForSize = (size: PackSize): number | null => {
     if (packSession && packSession.credits > 0 && packSession.packSize === size) {
       return packSession.credits;
@@ -47,11 +50,17 @@ export default function InteractiveShell() {
     return null;
   };
 
-  const [pendingSession, setPendingSession] = useState<SingleSessionType | null>(null);
-  const [activeSession, setActiveSession] = useState<SingleSessionType | null>(null);
-  const [showPackBooking, setShowPackBooking] = useState(false);
-  const [selectedPack, setSelectedPack] = useState<PackSize | null>(null);
-  const [signInGateLabel, setSignInGateLabel] = useState("");
+  const [pendingSession,    setPendingSession]    = useState<SingleSessionType | null>(null);
+  const [activeSession,     setActiveSession]     = useState<SingleSessionType | null>(null);
+  const [showPackBooking,   setShowPackBooking]   = useState(false);
+  const [selectedPack,      setSelectedPack]      = useState<PackSize | null>(null);
+  const [signInGateLabel,   setSignInGateLabel]   = useState("");
+  // When true the user reached 0 credits but still needs pack booking access
+  // to cancel/reschedule existing sessions via email links
+  const [forcePackBooking,  setForcePackBooking]  = useState(false);
+  const [rescheduleToken,   setRescheduleToken]   = useState<string | null>(null);
+  // Stores the reschedule intent when the user hits the link while logged out
+  const [pendingReschedule, setPendingReschedule] = useState<{ type: string; token: string | null; callbackUrl: string } | null>(null);
 
   function handleCreditsReady(_student: StudentInfo) {
     setSelectedPack(null);
@@ -91,10 +100,12 @@ export default function InteractiveShell() {
 
   function handleSignInGateClose() {
     setPendingSession(null);
+    setPendingReschedule(null);
     setSignInGateLabel("");
     setSelectedPack(null);
   }
 
+  // Auto-open the correct booking view after sign-in (pending session)
   useEffect(() => {
     if (isSignedIn && pendingSession && !activeSession) {
       setActiveSession(pendingSession);
@@ -103,8 +114,67 @@ export default function InteractiveShell() {
     }
   }, [isSignedIn, pendingSession, activeSession]);
 
-  // ── Pack booking overlay — full-screen fixed, same pattern as SingleSessionBooking ──
-  if (showPackBooking && packSession && googleUser?.email) {
+  // After sign-in, apply any pending reschedule intent
+  useEffect(() => {
+    if (!isSignedIn || !pendingReschedule) return;
+    const { type, token } = pendingReschedule;
+    if (token) setRescheduleToken(token);
+    if (type === "pack") {
+      setForcePackBooking(true);
+      setShowPackBooking(true);
+    } else if (["free15min", "session1h", "session2h"].includes(type)) {
+      setActiveSession(type as SingleSessionType);
+    }
+    setPendingReschedule(null);
+    setSignInGateLabel("");
+  }, [isSignedIn, pendingReschedule]);
+
+  // Handle /?reschedule= param from confirmation emails
+  useEffect(() => {
+    const reschedule = searchParams.get("reschedule");
+    const token      = searchParams.get("token");
+    if (!reschedule) return;
+
+    // Clear params from URL immediately regardless of auth state
+    const url = new URL(window.location.href);
+    url.searchParams.delete("reschedule");
+    url.searchParams.delete("token");
+    window.history.replaceState({}, "", url.toString());
+
+    if (!isSignedIn) {
+      // Not logged in — store intent and show sign-in gate.
+      // The callbackUrl encodes the reschedule params so they survive the
+      // Google OAuth round-trip and are processed on the next mount.
+      const callbackUrl = token
+        ? `/?reschedule=${encodeURIComponent(reschedule)}&token=${encodeURIComponent(token)}`
+        : `/?reschedule=${encodeURIComponent(reschedule)}`;
+      setPendingReschedule({ type: reschedule, token: token ?? null, callbackUrl });
+      setSignInGateLabel("reprogramar tu clase");
+      return;
+    }
+
+    // Already signed in — apply immediately
+    if (token) setRescheduleToken(token);
+    if (reschedule === "pack") {
+      setForcePackBooking(true);
+      setShowPackBooking(true);
+    } else if (["free15min", "session1h", "session2h"].includes(reschedule)) {
+      setActiveSession(reschedule as SingleSessionType);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Pack booking overlay — full-screen fixed ──────────────────────────────
+  // Accessible when user has credits OR when opened via reschedule link
+  // (forcePackBooking=true) so students can still cancel/reschedule after
+  // using all their credits.
+  const packStudentInfo = packSession
+    ? { email: packSession.email, name: packSession.name, credits: packSession.credits }
+    : googleUser?.email
+      ? { email: googleUser.email, name: googleUser.name ?? "", credits: 0 }
+      : null;
+
+  if (showPackBooking && packStudentInfo && googleUser?.email) {
     return (
       <div
         style={{
@@ -131,7 +201,7 @@ export default function InteractiveShell() {
             zIndex: 1,
           }}
         >
-          <CreditsPill credits={packSession.credits} />
+          <CreditsPill credits={packStudentInfo.credits} />
           <button
             onClick={() => setShowPackBooking(false)}
             style={{
@@ -160,16 +230,12 @@ export default function InteractiveShell() {
         {/* Calendar */}
         <div style={{ flex: 1, padding: "8px 0" }}>
           <BookingModeViewComponent
-            student={{
-              email: packSession.email,
-              name: packSession.name,
-              credits: packSession.credits,
-            }}
+            student={packStudentInfo}
+            rescheduleToken={rescheduleToken}
             onCreditsUpdated={(remaining: number) => {
               updateCredits(remaining);
-              if (remaining <= 0) setShowPackBooking(false);
             }}
-            onExit={() => setShowPackBooking(false)}
+            onExit={() => { setShowPackBooking(false); setForcePackBooking(false); setRescheduleToken(null); }}
             hideTopBar
           />
         </div>
@@ -184,7 +250,8 @@ export default function InteractiveShell() {
         sessionType={activeSession}
         userName={googleUser.name ?? ""}
         userEmail={googleUser.email}
-        onBack={() => setActiveSession(null)}
+        rescheduleToken={rescheduleToken}
+        onBack={() => { setActiveSession(null); setRescheduleToken(null); }}
       />
     );
   }
@@ -193,7 +260,11 @@ export default function InteractiveShell() {
   return (
     <>
       {signInGateLabel && !isSignedIn && (
-        <SignInGate actionLabel={signInGateLabel} onClose={handleSignInGateClose} />
+        <SignInGate
+          actionLabel={signInGateLabel}
+          callbackUrl={pendingReschedule?.callbackUrl}
+          onClose={handleSignInGateClose}
+        />
       )}
 
       {selectedPack && isSignedIn && googleUser?.email && (

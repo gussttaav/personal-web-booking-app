@@ -26,10 +26,11 @@ import {
 export type SingleSessionType = "free15min" | "session1h" | "session2h";
 
 interface SingleSessionBookingProps {
-  sessionType: SingleSessionType;
-  userName:    string;
-  userEmail:   string;
-  onBack:      () => void;
+  sessionType:      SingleSessionType;
+  userName:         string;
+  userEmail:        string;
+  rescheduleToken?: string | null;
+  onBack:           () => void;
 }
 
 type Phase = "picking" | "booking" | "redirecting" | "success" | "error";
@@ -38,6 +39,7 @@ export default function SingleSessionBooking({
   sessionType,
   userName,
   userEmail,
+  rescheduleToken,
   onBack,
 }: SingleSessionBookingProps) {
   const router = useRouter();
@@ -52,18 +54,21 @@ export default function SingleSessionBooking({
   const handleSlotSelected = useCallback(async (slot: SelectedSlot) => {
     setSelected(slot);
 
-    if (sessionType === "free15min") {
+    if (sessionType === "free15min" || rescheduleToken) {
+      // Free sessions always book directly.
+      // Paid sessions with a rescheduleToken are already paid — skip Stripe.
       setPhase("booking");
       try {
         const res  = await fetch("/api/book", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify({
-            startIso:    slot.startIso,
-            endIso:      slot.endIso,
-            sessionType: "free15min",
-            note:        slot.note,
-            timezone:    slot.timezone,
+            startIso:        slot.startIso,
+            endIso:          slot.endIso,
+            sessionType:     sessionType === "free15min" ? "free15min" : sessionType,
+            note:            slot.note,
+            timezone:        slot.timezone,
+            rescheduleToken: rescheduleToken ?? undefined,
           }),
         });
         const data = await res.json();
@@ -84,8 +89,9 @@ export default function SingleSessionBooking({
       const duration = sessionType === "session1h" ? "1h" : "2h";
       const data = await api.stripe.checkoutSingleSession({
         duration,
-        startIso: slot.startIso,
-        endIso:   slot.endIso,
+        startIso:        slot.startIso,
+        endIso:          slot.endIso,
+        rescheduleToken: rescheduleToken ?? undefined,
       });
       window.location.href = data.url;
     } catch (err) {

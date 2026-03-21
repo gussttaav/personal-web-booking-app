@@ -6,10 +6,13 @@ import GoogleSignInButton from "@/components/GoogleSignInButton";
 interface SignInGateProps {
   /** Human-readable name of what the user was trying to do */
   actionLabel: string;
+  /** If provided, Google OAuth will redirect back to this URL instead of "/".
+   *  Used to preserve reschedule params across the OAuth round-trip. */
+  callbackUrl?: string;
   onClose: () => void;
 }
 
-export default function SignInGate({ actionLabel, onClose }: SignInGateProps) {
+export default function SignInGate({ actionLabel, callbackUrl, onClose }: SignInGateProps) {
   return (
     <div
       className="fixed inset-0 flex items-center justify-center z-50 p-4"
@@ -57,8 +60,7 @@ export default function SignInGate({ actionLabel, onClose }: SignInGateProps) {
           necesitamos verificar tu identidad. Solo tardará un momento.
         </p>
 
-        {/* Google sign-in button */}
-        <GoogleSignInButton callbackUrl="/" />
+        <GoogleSignInButton callbackUrl={callbackUrl ?? "/"} />
 
         {/* Cancel */}
         <button

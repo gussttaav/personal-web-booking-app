@@ -64,13 +64,29 @@ export async function POST(req: NextRequest) {
 
     // ── Single session payment ───────────────────────────────────────────────
     if (checkoutType === "single") {
-      const startIso = session.metadata?.start_iso;
-      const endIso   = session.metadata?.end_iso;
-      const duration = session.metadata?.session_duration ?? "1h";
+      const startIso         = session.metadata?.start_iso;
+      const endIso           = session.metadata?.end_iso;
+      const duration         = session.metadata?.session_duration ?? "1h";
+      const rescheduleToken  = session.metadata?.reschedule_token || null;
 
       if (!startIso || !endIso) {
         console.error("[webhook] Missing slot timing in metadata");
         return NextResponse.json({ received: true, warning: "Missing slot timing" });
+      }
+
+      // ── Reschedule: delete old event before creating new one ────────────
+      if (rescheduleToken) {
+        const {
+          verifyCancellationToken,
+          consumeCancellationToken,
+          deleteCalendarEvent,
+        } = await import("@/lib/calendar");
+
+        const oldBooking = await verifyCancellationToken(rescheduleToken);
+        if (oldBooking) {
+          try { await deleteCalendarEvent(oldBooking.record.eventId); } catch {}
+          await consumeCancellationToken(rescheduleToken);
+        }
       }
 
       const SESSION_LABELS: Record<string, string> = {
@@ -107,9 +123,9 @@ export async function POST(req: NextRequest) {
               endIso,
               meetLink,
               cancelToken,
-              note:         null,               // No note from Stripe session
-              studentTz:    null,               // Timezone not captured at checkout
-              sessionType:  duration === "1h" ? "session1h" : "session2h",
+              note:        null,
+              studentTz:   null,
+              sessionType: duration === "1h" ? "session1h" : "session2h",
             }),
             sendNewBookingNotificationEmail({
               studentEmail: email,

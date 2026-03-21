@@ -6,11 +6,7 @@ const RESEND_API_URL = "https://api.resend.com/emails";
 const FROM     = process.env.RESEND_FROM ?? "Gustavo Torres <onboarding@resend.dev>";
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "https://gustavoai.dev";
 
-async function send(payload: {
-  to: string;
-  subject: string;
-  html: string;
-}): Promise<void> {
+async function send(payload: { to: string; subject: string; html: string }): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) { console.warn("[email] RESEND_API_KEY not set"); return; }
 
@@ -101,7 +97,7 @@ export async function sendConfirmationEmail(params: {
 }): Promise<void> {
   const tz         = params.studentTz ?? ADMIN_TZ;
   const cancelUrl  = `${BASE_URL}/cancelar?token=${params.cancelToken}`;
-  const reschedUrl = `${BASE_URL}${RESCHEDULE_PATHS[params.sessionType] ?? "/"}`;
+  const reschedUrl = `${BASE_URL}${RESCHEDULE_PATHS[params.sessionType] ?? "/"}&token=${params.cancelToken}`;
   const dateLabel  = formatDateInTz(params.startIso, tz);
   const startLabel = formatTimeInTz(params.startIso, tz);
   const endLabel   = formatTimeInTz(params.endIso,   tz);
