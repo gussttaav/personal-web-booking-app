@@ -15,16 +15,31 @@
  *   GOOGLE_CALENDAR_ID   ← your personal calendar ID (usually your Gmail address)
  *   CANCEL_SECRET        ← openssl rand -hex 32
  *
- * ARCH-02: Removed local Redis.fromEnv() call. Uses the shared `kv` singleton
- * from lib/redis.ts so only one Redis client exists per process.
+ * Applied fixes (cumulative):
+ *   Week 1 — CRIT-02a: createCancellationToken adds Redis TTL
+ *   Week 1 — CRIT-02b: consumeCancellationToken does hard kv.del()
+ *   Week 1 — SEC-02:   verifyCancellationToken validates hex format before crypto
+ *   Week 2 — ARCH-02:  Uses shared kv singleton from lib/redis.ts
+ *   Week 3 — PERF-01:  getAvailableSlots now uses date-fns-tz to build slot
+ *                       timestamps correctly for Europe/Madrid across DST
+ *                       transitions (CET = UTC+1, CEST = UTC+2).
  *
- * Fixes already applied in this file:
- *   - createCancellationToken: TTL set to session end + 1h buffer (CRIT-02a)
- *   - consumeCancellationToken: hard kv.del() instead of mark-as-used (CRIT-02b)
- *   - verifyCancellationToken: hex format validation before crypto (SEC-02)
+ * PERF-01 — DST fix detail:
+ *   The previous implementation hardcoded +01:00 when constructing slot start
+ *   times: new Date(`${dateStr}T${hh}:${mm}:00+01:00`). Spain uses UTC+1 in
+ *   winter (CET) and UTC+2 in summer (CEST). On summer days, every slot was
+ *   one hour off in UTC terms, making the freebusy comparison unreliable and
+ *   potentially showing booked slots as free (or vice versa).
+ *
+ *   Fix: use toZonedTime / fromZonedTime from date-fns-tz to construct slot
+ *   start times in the Europe/Madrid timezone, then convert to UTC for all
+ *   comparisons. The freebusy window (timeMin/timeMax) uses the same approach.
+ *
+ *   Install: npm install date-fns-tz
  */
 
 import { google } from "googleapis";
+import { toZonedTime, fromZonedTime, format } from "date-fns-tz";
 import { kv } from "@/lib/redis";
 import crypto from "crypto";
 import { SCHEDULE, DAY_SCHEDULES, dayStartHour } from "@/lib/booking-config";
@@ -32,6 +47,7 @@ import { SCHEDULE, DAY_SCHEDULES, dayStartHour } from "@/lib/booking-config";
 export { SCHEDULE }; // re-export so existing imports of SCHEDULE from calendar.ts still work
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID!;
+const TZ          = SCHEDULE.timezone; // "Europe/Madrid"
 
 // ─── Google auth ──────────────────────────────────────────────────────────────
 
@@ -58,24 +74,40 @@ export interface TimeSlot {
 }
 
 export interface BookingRecord {
-  eventId: string;
-  email: string;
-  name: string;
+  eventId:     string;
+  email:       string;
+  name:        string;
   sessionType: string;
-  startsAt: string;
-  endsAt: string;
-  used: boolean;
+  startsAt:    string;
+  endsAt:      string;
+  used:        boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Formats a UTC Date as "HH:mm" in the Madrid timezone.
+ * Uses the IANA timezone so DST is handled automatically.
+ */
 function formatTime(date: Date): string {
-  return date.toLocaleTimeString("es-ES", {
-    timeZone: SCHEDULE.timezone,
-    hour:     "2-digit",
-    minute:   "2-digit",
-    hour12:   false,
-  });
+  return format(toZonedTime(date, TZ), "HH:mm", { timeZone: TZ });
+}
+
+/**
+ * Builds a UTC Date from a local clock time on a given date in Europe/Madrid.
+ * fromZonedTime correctly applies the Madrid UTC offset for that exact day,
+ * returning UTC+1 in winter and UTC+2 in summer.
+ *
+ * @param dateStr  "YYYY-MM-DD"
+ * @param hours    Local hour (0-23) in Madrid time
+ * @param minutes  Local minute (0-59) in Madrid time
+ */
+function madridToUtc(dateStr: string, hours: number, minutes: number): Date {
+  // Construct a local datetime string in Madrid wall-clock time
+  const hh  = String(hours).padStart(2, "0");
+  const mm  = String(minutes).padStart(2, "0");
+  const localDateTimeStr = `${dateStr}T${hh}:${mm}:00`;
+  return fromZonedTime(localDateTimeStr, TZ);
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -84,18 +116,24 @@ function formatTime(date: Date): string {
  * Returns available time slots for a given date and session duration.
  * Queries Google Calendar freebusy, then subtracts busy blocks from
  * the working hours window.
+ *
+ * PERF-01: All timestamps are now built via madridToUtc() which uses
+ * date-fns-tz's fromZonedTime() to resolve the correct UTC offset for the
+ * given date. This replaces the hardcoded +01:00 suffix that produced wrong
+ * UTC times during CEST (summer, UTC+2).
  */
 export async function getAvailableSlots(
   dateStr: string,
   durationMinutes: number
 ): Promise<TimeSlot[]> {
-  const dow      = new Date(`${dateStr}T12:00:00`).getDay(); // 0=Sun…6=Sat
+  const dow      = new Date(`${dateStr}T12:00:00Z`).getDay(); // day-of-week is timezone-independent at noon
   const daySched = DAY_SCHEDULES[dow];
   if (!daySched) return [];
 
   const startHour = dayStartHour(dow);
 
-  const MORNING_END_MINUTES = daySched.morningEnd * 60 - 15; // 13:45 = 825 min from midnight
+  // Build time windows in minutes-from-midnight (local Madrid time)
+  const MORNING_END_MINUTES = daySched.morningEnd * 60 - 15; // 13:45 = 825 min
   const windows: { startMin: number; endMin: number }[] = [
     { startMin: startHour * 60, endMin: MORNING_END_MINUTES },
   ];
@@ -106,15 +144,16 @@ export async function getAvailableSlots(
     });
   }
 
-  const timeMin = new Date(`${dateStr}T00:00:00+01:00`).toISOString();
-  const timeMax = new Date(`${dateStr}T23:59:59+01:00`).toISOString();
+  // PERF-01: Build freebusy window in UTC using madridToUtc, not a hardcoded +01:00
+  const timeMin = madridToUtc(dateStr, 0, 0).toISOString();
+  const timeMax = madridToUtc(dateStr, 23, 59).toISOString();
 
   const calendar    = getCalendar();
   const freebusyRes = await calendar.freebusy.query({
     requestBody: {
       timeMin,
       timeMax,
-      timeZone: SCHEDULE.timezone,
+      timeZone: TZ,
       items:    [{ id: CALENDAR_ID }],
     },
   });
@@ -124,13 +163,15 @@ export async function getAvailableSlots(
   const now            = new Date();
   const minBookingTime = new Date(now.getTime() + SCHEDULE.minNoticeHours * 60 * 60 * 1000);
 
-  // Iterate over each time window and generate slots
   for (const window of windows) {
-    // Start cursor at window start (in UTC, using Madrid offset)
     let cursorMin = window.startMin;
 
     while (cursorMin + durationMinutes <= window.endMin) {
-      const slotStart = new Date(`${dateStr}T${String(Math.floor(cursorMin / 60)).padStart(2, "0")}:${String(cursorMin % 60).padStart(2, "0")}:00+01:00`);
+      const localHours   = Math.floor(cursorMin / 60);
+      const localMinutes = cursorMin % 60;
+
+      // PERF-01: convert local Madrid time → UTC correctly for this date
+      const slotStart = madridToUtc(dateStr, localHours, localMinutes);
       const slotEnd   = new Date(slotStart.getTime() + durationMinutes * 60_000);
 
       const overlapsBusy = busyBlocks.some((block) => {
@@ -174,8 +215,8 @@ export async function createCalendarEvent(params: {
         ? `${params.description}\n\nGoogle Meet: ${meetLink}`
         : params.description,
       location: meetLink || undefined,
-      start: { dateTime: params.startIso, timeZone: SCHEDULE.timezone },
-      end:   { dateTime: params.endIso,   timeZone: SCHEDULE.timezone },
+      start: { dateTime: params.startIso, timeZone: TZ },
+      end:   { dateTime: params.endIso,   timeZone: TZ },
       reminders: {
         useDefault: false,
         overrides:  [
@@ -233,8 +274,10 @@ export async function createCancellationToken(
 
 /**
  * Verifies a cancellation token and returns the booking record if valid.
- * Returns null if the token is invalid, already expired, or the 2-hour window has closed.
- * Validates token format before crypto operations to prevent buffer-length mismatch (SEC-02).
+ * Returns null if the token is invalid, already expired, or the 2-hour
+ * cancellation window has closed.
+ *
+ * SEC-02: Token format validated before crypto operations.
  */
 export async function verifyCancellationToken(
   token: string
@@ -245,10 +288,10 @@ export async function verifyCancellationToken(
   const record = await kv.get<BookingRecord>(`cancel:${token}`);
   if (!record || record.used) return null;
 
-  // Verify the HMAC signature using constant-time comparison
   const expectedPayload = `${record.eventId}:${record.email}:${record.startsAt}`;
   const expectedToken   = signToken(expectedPayload);
 
+  // Both buffers guaranteed 32 bytes (64 hex chars validated above)
   const valid = crypto.timingSafeEqual(
     Buffer.from(token, "hex"),
     Buffer.from(expectedToken, "hex")
