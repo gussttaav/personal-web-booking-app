@@ -9,6 +9,10 @@ const nextConfig = {
     ],
   },
 
+  experimental: {
+    instrumentationHook: true,
+  },
+
   async headers() {
     const csp = isDev
       ? [

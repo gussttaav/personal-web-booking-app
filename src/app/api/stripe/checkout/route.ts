@@ -1,11 +1,15 @@
+/**
+ * POST /api/stripe/checkout
+ * Week 4 — OBS-01: console.* replaced with structured log() calls.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { stripe } from "@/lib/stripe";                      // ARCH-01: singleton
-import { CheckoutSchema } from "@/lib/schemas";             // ARCH-03: shared schema
+import { stripe } from "@/lib/stripe";
+import { CheckoutSchema } from "@/lib/schemas";
 import { checkoutRatelimit } from "@/lib/ratelimit";
 import { getClientIp } from "@/lib/ip-utils";
-
-// ─── Stripe price helpers ─────────────────────────────────────────────────────
+import { log } from "@/lib/logger";
 
 function getPackPriceId(packSize: number): string {
   const ids: Record<number, string | undefined> = {
@@ -27,17 +31,13 @@ function getSingleSessionPriceId(duration: "1h" | "2h"): string {
   return id;
 }
 
-// ─── Route handler ────────────────────────────────────────────────────────────
-
 export async function POST(req: NextRequest) {
-  // ── Rate limit ────────────────────────────────────────────────────────────
   const ip = getClientIp(req);
   const { success } = await checkoutRatelimit.limit(ip);
   if (!success) {
     return NextResponse.json({ error: "Demasiadas peticiones" }, { status: 429 });
   }
 
-  // ── Auth ──────────────────────────────────────────────────────────────────
   const session = await auth();
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Debes iniciar sesión para continuar" }, { status: 401 });
@@ -50,7 +50,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Error de configuración del servidor" }, { status: 500 });
   }
 
-  // ── Parse & validate body ─────────────────────────────────────────────────
   let rawBody: unknown;
   try { rawBody = await req.json(); }
   catch { return NextResponse.json({ error: "Cuerpo de petición inválido" }, { status: 400 }); }
@@ -65,7 +64,6 @@ export async function POST(req: NextRequest) {
 
   const body = parsed.data;
 
-  // ── Create Stripe session ─────────────────────────────────────────────────
   try {
     if (body.type === "pack") {
       const stripeSession = await stripe.checkout.sessions.create({
@@ -85,7 +83,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ url: stripeSession.url });
     }
 
-    // Single session — include slot timing in metadata for the webhook
     const stripeSession = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       mode:           "payment",
@@ -106,7 +103,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ url: stripeSession.url });
 
   } catch (err) {
-    console.error("[checkout] Stripe error:", err);
+    log("error", "Stripe checkout error", { service: "checkout", email, error: String(err) });
     return NextResponse.json({ error: "Error al crear la sesión de pago" }, { status: 500 });
   }
 }

@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAvailableSlots } from "@/lib/calendar";
 import { SCHEDULE, DAY_SCHEDULES } from "@/lib/booking-config";
-import { availabilityRatelimit } from "@/lib/ratelimit"; // PERF-03: dedicated limiter
+import { availabilityRatelimit } from "@/lib/ratelimit";
 import { getClientIp } from "@/lib/ip-utils";
+import { log } from "@/lib/logger";
 
 export async function GET(req: NextRequest) {
-  // PERF-03: Use the dedicated availabilityRatelimit instead of borrowing
-  // chatRatelimit with an avail: prefix. Previously both routes shared the
-  // same 20-req/min budget under different key prefixes.
   const ip = getClientIp(req);
   const { success } = await availabilityRatelimit.limit(ip);
   if (!success) return NextResponse.json({ error: "Demasiadas peticiones" }, { status: 429 });
@@ -29,7 +27,7 @@ export async function GET(req: NextRequest) {
   maxDate.setDate(maxDate.getDate() + SCHEDULE.bookingWindowWeeks * 7);
   if (requested > maxDate) return NextResponse.json({ slots: [] });
 
-  const dow = new Date(`${date}T12:00:00`).getDay();
+  const dow = new Date(`${date}T12:00:00Z`).getDay();
   if (DAY_SCHEDULES[dow] === null) return NextResponse.json({ slots: [] });
 
   try {
@@ -44,7 +42,7 @@ export async function GET(req: NextRequest) {
     }));
     return NextResponse.json({ slots: withLocalTime, timezone: SCHEDULE.timezone });
   } catch (err) {
-    console.error("[availability] Error fetching slots:", err);
+    log("error", "Error fetching slots", { service: "availability", date, error: String(err) });
     return NextResponse.json({ error: "Error al consultar disponibilidad" }, { status: 500 });
   }
 }

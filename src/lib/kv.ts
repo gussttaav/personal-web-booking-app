@@ -9,26 +9,27 @@
  * impossible to distinguish "user never purchased" from "pack expired".
  * We keep the record forever and check expiresAt at read time.
  *
- * ARCH-02: Removed local Redis.fromEnv() call. The shared `kv` singleton
- * from lib/redis.ts is used instead, so only one Redis client is created
- * per process across kv.ts, calendar.ts, and ratelimit.ts.
+ * Applied fixes (cumulative):
+ *   Week 2 — ARCH-02: Uses shared kv singleton from lib/redis.ts
+ *   Week 4 — OBS-01:  console.* replaced with structured log() calls
  */
 
 import type { CreditResult, PackSize } from "@/types";
 import { PACK_SIZES, PACK_VALIDITY_MONTHS } from "@/constants";
 import { kv } from "@/lib/redis";
+import { log } from "@/lib/logger";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface CreditRecord {
-  email: string;
-  name: string;
-  credits: number;
-  packLabel: string;
-  packSize: PackSize | null;
-  expiresAt: string;       // ISO string
-  lastUpdated: string;     // ISO string
-  stripeSessionId: string; // last processed session — idempotency key
+  email:          string;
+  name:           string;
+  credits:        number;
+  packLabel:      string;
+  packSize:       PackSize | null;
+  expiresAt:      string;       // ISO string
+  lastUpdated:    string;       // ISO string
+  stripeSessionId: string;      // last processed session — idempotency key
 }
 
 // ─── Key helper ───────────────────────────────────────────────────────────────
@@ -59,16 +60,11 @@ function parsePackSize(packLabel: string): PackSize | null {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-/**
- * Read a student's active credit balance.
- * Returns null if the student has never purchased.
- */
 export async function getCredits(email: string): Promise<CreditResult | null> {
   const record = await kv.get<CreditRecord>(key(email));
   if (!record) return null;
 
   const credits = isExpired(record.expiresAt) ? 0 : record.credits;
-
   return {
     credits,
     name:      record.name,
@@ -77,10 +73,6 @@ export async function getCredits(email: string): Promise<CreditResult | null> {
   };
 }
 
-/**
- * Create or update a student's credit record after a successful Stripe payment.
- * Idempotent: calling with the same stripeSessionId twice is a no-op.
- */
 export async function addOrUpdateStudent(
   email: string,
   name: string,
@@ -91,51 +83,44 @@ export async function addOrUpdateStudent(
   const k        = key(email);
   const existing = await kv.get<CreditRecord>(k);
 
-  // ── Idempotency check ────────────────────────────────────────────────────
   if (existing?.stripeSessionId === stripeSessionId) {
-    console.info(`[kv] Duplicate webhook skipped: ${stripeSessionId}`);
+    log("info", "Duplicate webhook skipped", { service: "kv", stripeSessionId });
     return;
   }
 
-  const now      = new Date();
+  const now       = new Date();
   const expiresAt = addMonths(now, PACK_VALIDITY_MONTHS).toISOString();
-
-  // If the existing pack is expired, reset credits to 0 before adding
   const baseCredits =
     existing && !isExpired(existing.expiresAt) ? existing.credits : 0;
 
   const record: CreditRecord = {
     email: email.toLowerCase().trim(),
     name,
-    credits: baseCredits + creditsToAdd,
+    credits:        baseCredits + creditsToAdd,
     packLabel,
-    packSize: parsePackSize(packLabel),
+    packSize:       parsePackSize(packLabel),
     expiresAt,
-    lastUpdated: now.toISOString(),
+    lastUpdated:    now.toISOString(),
     stripeSessionId,
   };
 
   await kv.set(k, record);
-  console.info(`[kv] Credits updated: ${email} credits=${record.credits}`);
+  log("info", "Credits updated", { service: "kv", email, credits: record.credits });
 }
 
-/**
- * Decrement a student's credits by 1 when they book a class.
- * Returns { ok: false } if the student has no active credits.
- */
 export async function decrementCredit(
   email: string
 ): Promise<{ ok: boolean; remaining: number }> {
   const k      = key(email);
   const record = await kv.get<CreditRecord>(k);
 
-  if (!record)                       return { ok: false, remaining: 0 };
-  if (isExpired(record.expiresAt))   return { ok: false, remaining: 0 };
-  if (record.credits <= 0)           return { ok: false, remaining: 0 };
+  if (!record)                     return { ok: false, remaining: 0 };
+  if (isExpired(record.expiresAt)) return { ok: false, remaining: 0 };
+  if (record.credits <= 0)         return { ok: false, remaining: 0 };
 
   const updated: CreditRecord = {
     ...record,
-    credits: record.credits - 1,
+    credits:     record.credits - 1,
     lastUpdated: new Date().toISOString(),
   };
 
@@ -143,11 +128,6 @@ export async function decrementCredit(
   return { ok: true, remaining: updated.credits };
 }
 
-/**
- * Restore 1 credit when a student cancels a pack class.
- * Capped at the original pack size so credits can never exceed what was purchased.
- * Returns ok:false if the student has no record or their pack has expired.
- */
 export async function restoreCredit(
   email: string
 ): Promise<{ ok: boolean; credits: number }> {
@@ -167,6 +147,6 @@ export async function restoreCredit(
   };
 
   await kv.set(k, updated);
-  console.info(`[kv] Credit restored: ${email} credits=${restored}`);
+  log("info", "Credit restored", { service: "kv", email, credits: restored });
   return { ok: true, credits: restored };
 }
