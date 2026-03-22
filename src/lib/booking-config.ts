@@ -49,6 +49,13 @@ export const SCHEDULE = {
   /** All days are working days — per-day schedule controls actual hours */
   workingDays: [0, 1, 2, 3, 4, 5, 6] as number[],
   bookingWindowWeeks: 8,
-  minNoticeHours: 2,
+  /**
+   * Minimum advance notice required before a session can be booked, in hours.
+   * Applied identically to all session types (15 min, 1h, 2h, pack).
+   * The backend (calendar.ts + /api/book) is the source of truth;
+   * the frontend hides slots that fall within this window via the
+   * availability API (which calls getAvailableSlots with this value).
+   */
+  minNoticeHours: 5,
   timezone: "Europe/Madrid",
 } as const;

@@ -8,17 +8,26 @@
  * ARCH-06: Refactored from a ~280-line god component into a thin orchestrator
  * that delegates to two purpose-built hooks:
  *
- *   useBookingRouter   — which view is active, sign-in gate state, all click
- *                        handlers (was: 7 useState + 2 useEffect + all handler fns)
+ *   useBookingRouter    — which view is active, sign-in gate state, handlers
  *   useRescheduleIntent — URL param parsing, reschedule state machine
- *                        (was: 3 useState + 3 useEffect blocks)
  *
- * This component now only wires auth state + the two hooks together and
- * renders the appropriate overlay. Adding a new booking flow type no longer
- * requires touching this file — it goes into useBookingRouter.
+ * Changes in this version:
  *
- * UX-01 skeleton (Week 5) is preserved: auth loading skeletons are rendered
- * while isAuthLoading is true.
+ * 1. Passes packSession?.credits to useBookingRouter so it can correctly
+ *    route the post-login buy-pack intent (booking view vs. purchase modal).
+ *
+ * 2. Passes router.signInCallbackUrl to SignInGate so the user's intent
+ *    (encoded as ?intent=... or ?action=...) survives the Google OAuth round-
+ *    trip and the correct view is opened on return.
+ *
+ * 3. Pack booking overlay: BookingModeView uses position:fixed which covers
+ *    the whole screen including any parent-level back button. The back button
+ *    is therefore rendered INSIDE the fixed overlay by InteractiveShell,
+ *    pinned at the top via a sticky bar with z-index above the inner content.
+ *    BookingModeView is always rendered with hideTopBar=true so its internal
+ *    FullScreenShell header (which also has a back button) stays hidden and
+ *    only our outer header is shown — on EVERY phase including the success
+ *    and "book another" screens.
  */
 
 import { useEffect } from "react";
@@ -63,7 +72,7 @@ export default function InteractiveShell() {
   const { googleUser, isSignedIn, isAuthLoading, packSession, creditsLoading, updateCredits } =
     useUserSession();
 
-  const router    = useBookingRouter(isSignedIn);
+  const router     = useBookingRouter(isSignedIn, packSession?.credits ?? 0);
   const reschedule = useRescheduleIntent(isSignedIn);
 
   // Wire reschedule intent into the router once it resolves
@@ -82,6 +91,15 @@ export default function InteractiveShell() {
   }, [reschedule.signInLabel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Pack booking overlay ──────────────────────────────────────────────────
+  //
+  // BookingModeView renders a position:fixed full-screen overlay internally
+  // (via FullScreenShell). Any DOM rendered before it in the tree is covered.
+  // We therefore render the back button INSIDE the fixed overlay using a
+  // sticky bar that sits above the BookingModeView content (z-index: 50).
+  // hideTopBar=true suppresses the duplicate back button inside BookingModeView.
+  // This sticky bar persists across ALL phases (idle, selected, confirming,
+  // success, error, "book another") because showPackBooking never changes
+  // while the user is in the pack booking flow.
   const packStudentInfo = packSession
     ? { email: packSession.email, name: packSession.name, credits: packSession.credits }
     : googleUser?.email
@@ -90,20 +108,48 @@ export default function InteractiveShell() {
 
   if (router.showPackBooking && packStudentInfo && googleUser?.email) {
     return (
-      <div style={{ position: "fixed", inset: 0, background: "var(--bg)", zIndex: 40, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 24px", borderBottom: "1px solid var(--border)", position: "sticky", top: 0, background: "var(--bg)", zIndex: 1 }}>
+      // This div is position:fixed via BookingModeView's FullScreenShell —
+      // we wrap it in a fragment and layer our sticky bar on top via z-index.
+      <div style={{ position: "fixed", inset: 0, zIndex: 40, display: "flex", flexDirection: "column" }}>
+        {/* Sticky top bar — always visible, sits above BookingModeView content */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "14px 24px",
+            borderBottom: "1px solid var(--border)",
+            background: "rgba(13,15,16,0.92)",
+            backdropFilter: "blur(12px)",
+            flexShrink: 0,
+            zIndex: 50,
+          }}
+        >
           <CreditsPill credits={packStudentInfo.credits} />
           <button
             onClick={router.closePackBooking}
-            style={{ fontSize: 13, color: COLORS.textMuted, background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, transition: "color 0.2s" }}
+            style={{
+              fontSize: 13,
+              color: COLORS.textMuted,
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              transition: "color 0.2s",
+              fontFamily: "inherit",
+            }}
             onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = COLORS.textSecondary)}
             onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = COLORS.textMuted)}
             aria-label="Volver a la página principal"
           >
-            ← Volver
+            ← Volver al inicio
           </button>
         </div>
-        <div style={{ flex: 1, padding: "8px 0" }}>
+
+        {/* BookingModeView fills the remaining space; its own top bar is hidden */}
+        <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
           <BookingModeViewComponent
             student={packStudentInfo}
             rescheduleToken={router.rescheduleToken}
@@ -131,7 +177,9 @@ export default function InteractiveShell() {
 
   // ── Normal landing layer ──────────────────────────────────────────────────
   const combinedSignInLabel = router.signInGateLabel || reschedule.signInLabel;
-  const combinedCallbackUrl = reschedule.pendingReschedule?.callbackUrl;
+  // Prefer the router's intent-encoded callbackUrl; fall back to the reschedule
+  // callbackUrl if the sign-in was triggered by a reschedule link.
+  const combinedCallbackUrl = router.signInCallbackUrl ?? reschedule.pendingReschedule?.callbackUrl;
 
   return (
     <>

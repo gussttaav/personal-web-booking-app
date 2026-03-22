@@ -18,9 +18,9 @@ function SuccessContent() {
   const { state, credits, name, packSize } = useSSECredits({ sessionId });
 
   const isConnecting = state === "connecting";
-  const isConfirmed = state === "confirmed" && credits !== null;
-  const isTimeout = state === "timeout";
-  const isError = state === "error";
+  const isConfirmed  = state === "confirmed" && credits !== null;
+  const isTimeout    = state === "timeout";
+  const isError      = state === "error";
 
   if (!sessionId) {
     return (
@@ -31,6 +31,16 @@ function SuccessContent() {
         </Button>
       </PageShell>
     );
+  }
+
+  /**
+   * After a successful pack purchase the user wants to book their first class
+   * immediately. We redirect to /?action=schedule-pack so InteractiveShell
+   * can read that param on mount and open the pack booking view automatically,
+   * without the user having to find and click "Reservar mis clases" manually.
+   */
+  function handleScheduleClasses() {
+    router.push("/?action=schedule-pack");
   }
 
   return (
@@ -81,7 +91,7 @@ function SuccessContent() {
         </Alert>
       )}
 
-      {(isError) && (
+      {isError && (
         <Alert variant="error">
           Error al conectar con el servidor. Por favor recarga la página.
         </Alert>
@@ -104,11 +114,11 @@ function SuccessContent() {
         </div>
       )}
 
-      {/* CTA */}
+      {/* Primary CTA — opens pack booking view directly */}
       <Button
         variant="primary"
         fullWidth
-        onClick={() => router.push("/")}
+        onClick={handleScheduleClasses}
         disabled={!isConfirmed}
       >
         {isConfirmed ? "Reservar mis clases →" : "Esperando confirmación..."}

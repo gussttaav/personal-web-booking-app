@@ -2,7 +2,9 @@
  * POST /api/book
  *
  * Unified booking endpoint for all session types.
- * Week 4 — OBS-01: console.* replaced with structured log() calls.
+ *
+ * MIN NOTICE: the advance-booking guard now reads SCHEDULE.minNoticeHours
+ * from booking-config (single source of truth) instead of a hardcoded "2".
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -12,6 +14,7 @@ import { createCalendarEvent, createCancellationToken } from "@/lib/calendar";
 import { decrementCredit } from "@/lib/kv";
 import { sendConfirmationEmail, sendNewBookingNotificationEmail } from "@/lib/email";
 import { log } from "@/lib/logger";
+import { SCHEDULE } from "@/lib/booking-config";
 import type { z } from "zod";
 
 const SESSION_LABELS: Record<string, string> = {
@@ -57,8 +60,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Guard: slot must be at least SCHEDULE.minNoticeHours in the future.
+  // This is the backend source of truth — the frontend hides such slots
+  // via the availability API, but we re-check here to be safe.
   const startsAt    = new Date(startIso);
-  const minBookable = new Date(Date.now() + 2 * 60 * 60_000);
+  const minBookable = new Date(Date.now() + SCHEDULE.minNoticeHours * 60 * 60_000);
   if (startsAt < minBookable) {
     return NextResponse.json({ error: "Este horario ya no está disponible" }, { status: 409 });
   }

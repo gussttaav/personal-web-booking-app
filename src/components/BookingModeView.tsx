@@ -7,30 +7,27 @@
  *
  * Applied UX improvements (Week 5):
  *
- * UX-02 — Two-phase slot confirmation:
- *   Previously selecting a slot immediately fired the POST /api/book request.
- *   There was no confirmation step — a mis-tap on mobile would charge a credit
- *   without the student intending to book. Now selecting a slot moves to
- *   "selected" phase showing a ConfirmPanel; the student must explicitly press
- *   "Confirmar reserva" to trigger the API call. The "confirming" phase (spinner
- *   during the in-flight request) is now separate from "selected".
+ * UX-02 — Two-phase slot confirmation
+ * UX-03 — User-friendly error messages via friendlyError()
+ * UX-05 — Cancel link on success screen
  *
- * UX-03 — User-friendly error messages:
- *   HTTP status codes are now mapped to actionable Spanish messages via
- *   friendlyError() from @/constants/errors. "Error al registrar la reserva."
- *   is gone; the user now sees context-specific guidance.
+ * LAYOUT FIX — embedded vs. standalone mode
+ * ─────────────────────────────────────────
+ * FullScreenShell uses position:fixed to cover the viewport. When
+ * BookingModeView is rendered inside InteractiveShell's pack overlay
+ * (hideTopBar=true), the outer InteractiveShell div is already
+ * position:fixed and provides the back button. In that case FullScreenShell
+ * must NOT use position:fixed — it should fill the space given to it by its
+ * parent (position:relative, height:100%).
  *
- * UX-05 — Cancel link on success screen:
- *   When the API returns a cancelToken, the success screen now shows a direct
- *   "Cancelar reserva" link alongside the email confirmation note. Students who
- *   need to cancel immediately no longer have to wait for an email that may be
- *   delayed or filtered.
+ * The hideTopBar prop doubles as the "embedded" signal:
+ *   hideTopBar=false (default) → standalone mode → position:fixed, own back button
+ *   hideTopBar=true            → embedded mode   → position:relative, no back button
  *
- * All Week 2 fixes are carried forward:
- *   - api.book.post() typed API client (ARCH-04)
- *   - hideTopBar implemented in FullScreenShell (bug fix)
- *   - unused Button/CreditsPill imports removed
- *   - cancelToken state removed (re-added here as UX-05 requires it)
+ * CONFIRM PANEL WIDTH FIX
+ * ───────────────────────
+ * ConfirmPanel now renders inside a max-width:480px centred wrapper so it
+ * doesn't stretch to fill the full calendar column on wide screens.
  */
 
 import { useState, useCallback } from "react";
@@ -42,7 +39,6 @@ import { api, ApiError } from "@/lib/api-client";
 import WeeklyCalendar, { type SelectedSlot } from "@/components/WeeklyCalendar";
 import type { StudentInfo } from "@/types";
 
-// UX-02: "selected" is a new phase between "idle" and "confirming"
 type BookingPhase = "idle" | "selected" | "confirming" | "success" | "error";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "";
@@ -66,21 +62,18 @@ export default function BookingModeView({
   const [remaining,   setRemaining]   = useState(student.credits);
   const [errMsg,      setErrMsg]      = useState("");
   const [meetLink,    setMeetLink]    = useState("");
-  const [cancelToken, setCancelToken] = useState(""); // UX-05: store for cancel link
+  const [cancelToken, setCancelToken] = useState("");
   const [selected,    setSelected]    = useState<SelectedSlot | null>(null);
   const [emailFailed, setEmailFailed] = useState(false);
 
-  // UX-02: Step 1 — slot selected → show confirm panel (no API call yet)
   const handleSlotSelected = useCallback((slot: SelectedSlot) => {
     setSelected(slot);
     setPhase("selected");
   }, []);
 
-  // UX-02: Step 2 — user clicks "Confirmar reserva" → fire the API call
   const handleConfirm = useCallback(async () => {
     if (!selected) return;
     setPhase("confirming");
-
     try {
       const data = await api.book.post({
         startIso:        selected.startIso,
@@ -90,16 +83,14 @@ export default function BookingModeView({
         timezone:        selected.timezone,
         rescheduleToken: rescheduleToken ?? undefined,
       });
-
       const newRemaining = remaining - 1;
       setRemaining(newRemaining);
       setMeetLink(data.meetLink);
-      setCancelToken(data.cancelToken); // UX-05
+      setCancelToken(data.cancelToken);
       setEmailFailed(data.emailFailed);
       setPhase("success");
       onCreditsUpdated(newRemaining);
     } catch (err) {
-      // UX-03: map status code to friendly message
       const status = err instanceof ApiError ? err.status : 0;
       const raw    = err instanceof ApiError ? err.message : "Error al registrar la reserva.";
       setErrMsg(friendlyError(status, raw));
@@ -115,14 +106,13 @@ export default function BookingModeView({
     setEmailFailed(false);
   }
 
-  // UX-05: build the direct cancel URL from the token
   const cancelUrl = cancelToken ? `${BASE_URL}/cancelar?token=${cancelToken}` : null;
 
   // ── Success screen ──────────────────────────────────────────────────────────
   if (phase === "success") {
     return (
       <FullScreenShell onBack={onExit} badgeType="pack" badgeLabel="Pack activo" title="Reservar clase del pack" hideTopBar={hideTopBar}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, padding: "40px 24px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, padding: "40px 24px", overflowY: "auto" }}>
           <div style={{ textAlign: "center", maxWidth: 380, width: "100%" }}>
             <div style={{ width: 64, height: 64, borderRadius: "50%", margin: "0 auto 20px", background: "rgba(61,220,132,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, color: "var(--green)" }}>✓</div>
 
@@ -138,7 +128,6 @@ export default function BookingModeView({
                 <a href={meetLink} target="_blank" rel="noopener noreferrer" style={{ display: "block", wordBreak: "break-all", fontSize: 13, color: "var(--green)", textDecoration: "underline", marginBottom: 8 }}>
                   {meetLink}
                 </a>
-                {/* UX-05: cancel link even when email failed */}
                 {cancelUrl && (
                   <a href={cancelUrl} style={{ display: "block", fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
                     Cancelar esta reserva
@@ -150,7 +139,6 @@ export default function BookingModeView({
                 <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>
                   Recibirás el enlace de Google Meet y la confirmación por email.
                 </p>
-                {/* UX-05: direct cancel link — useful if email is delayed or filtered */}
                 {cancelUrl && (
                   <p style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 20 }}>
                     También puedes{" "}
@@ -196,7 +184,7 @@ export default function BookingModeView({
   if (phase === "error") {
     return (
       <FullScreenShell onBack={onExit} badgeType="pack" badgeLabel="Pack activo" title="Reservar clase del pack" hideTopBar={hideTopBar}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, padding: 40 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, padding: 40, overflowY: "auto" }}>
           <div style={{ textAlign: "center", maxWidth: 380, width: "100%" }}>
             <div style={{ width: 56, height: 56, borderRadius: "50%", margin: "0 auto 16px", background: COLORS.errorBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: COLORS.error }}>✕</div>
             <h3 style={{ fontSize: 18, color: "var(--text)", marginBottom: 8 }}>Algo salió mal</h3>
@@ -211,7 +199,7 @@ export default function BookingModeView({
   // ── Main booking UI (idle + selected + confirming) ─────────────────────────
   return (
     <FullScreenShell onBack={onExit} badgeType="pack" badgeLabel="Pack activo" title="Reservar clase del pack" hideTopBar={hideTopBar}>
-      <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", flex: 1, minHeight: 0 }} className="booking-split">
+      <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", flex: 1, minHeight: 0, overflow: "hidden" }} className="booking-split">
 
         {/* ── Sidebar ── */}
         <div style={{ borderRight: "1px solid var(--border)", padding: "28px 24px", display: "flex", flexDirection: "column", gap: 20, overflowY: "auto" }}>
@@ -246,7 +234,6 @@ export default function BookingModeView({
         {/* ── Calendar / confirm area ── */}
         <div style={{ padding: "24px 28px", display: "flex", flexDirection: "column", gap: 20, overflowY: "auto" }}>
           {phase === "confirming" ? (
-            // In-flight request spinner
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, gap: 12 }}>
               <Spinner />
               <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
@@ -254,15 +241,18 @@ export default function BookingModeView({
               </p>
             </div>
           ) : phase === "selected" && selected ? (
-            // UX-02: Confirmation step — slot chosen, waiting for user to confirm
-            <ConfirmPanel
-              slot={selected}
-              onConfirm={handleConfirm}
-              onCancel={() => setPhase("idle")}
-              packInfo={{ remaining }}
-            />
+            // Constrain ConfirmPanel width so it doesn't stretch across wide screens
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <div style={{ width: "100%", maxWidth: 480 }}>
+                <ConfirmPanel
+                  slot={selected}
+                  onConfirm={handleConfirm}
+                  onCancel={() => setPhase("idle")}
+                  packInfo={{ remaining }}
+                />
+              </div>
+            </div>
           ) : (
-            // Default: calendar
             <WeeklyCalendar
               durationMinutes={60}
               onSlotSelected={handleSlotSelected}
@@ -298,44 +288,57 @@ export const SESSION_CONFIGS: Record<string, SessionConfig> = {
 };
 
 // ─── FullScreenShell ──────────────────────────────────────────────────────────
+//
+// Two modes controlled by hideTopBar:
+//   false (default) — standalone: position:fixed, own back button shown
+//   true            — embedded:   position:relative + height:100%, no back button
+//                     (InteractiveShell renders its own back button above this)
 
 export function FullScreenShell({
   children, onBack, badgeType, badgeLabel, title, hideTopBar = false,
 }: {
-  children:   React.ReactNode;
-  onBack:     () => void;
-  badgeType:  "free" | "paid" | "pack";
-  badgeLabel: string;
-  title:      string;
+  children:    React.ReactNode;
+  onBack:      () => void;
+  badgeType:   "free" | "paid" | "pack";
+  badgeLabel:  string;
+  title:       string;
   hideTopBar?: boolean;
 }) {
   const badgeColors = {
-    free: { bg: "rgba(61,220,132,0.1)",  border: "rgba(61,220,132,0.2)",  color: "var(--green)" },
-    paid: { bg: "var(--surface-2, #1c1f21)", border: "var(--border)",     color: "var(--text-muted)" },
-    pack: { bg: "rgba(99,179,237,0.1)",  border: "rgba(99,179,237,0.25)", color: "#63b3ed" },
+    free: { bg: "rgba(61,220,132,0.1)",       border: "rgba(61,220,132,0.2)",  color: "var(--green)" },
+    paid: { bg: "var(--surface-2, #1c1f21)", border: "var(--border)",          color: "var(--text-muted)" },
+    pack: { bg: "rgba(99,179,237,0.1)",       border: "rgba(99,179,237,0.25)", color: "#63b3ed" },
   }[badgeType];
 
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "var(--bg)", zIndex: 40, display: "flex", flexDirection: "column", overflowY: "auto" }}>
-      {!hideTopBar && <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 24px", borderBottom: "1px solid var(--border)", background: "rgba(13,15,16,0.85)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 100, flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button onClick={onBack} aria-label="Volver" style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "border-color 0.2s, color 0.2s" }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.2)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
-          </button>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>{title}</div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Elige un día y hora disponible</div>
-          </div>
-        </div>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 100, fontSize: 11.5, fontWeight: 500, background: badgeColors.bg, border: `1px solid ${badgeColors.border}`, color: badgeColors.color }}>
-          {badgeLabel}
-        </span>
-      </div>}
+  // Embedded mode: fill the container given by InteractiveShell, don't go fixed.
+  // Standalone mode: take over the viewport.
+  const rootStyle: React.CSSProperties = hideTopBar
+    ? { position: "relative", height: "100%", display: "flex", flexDirection: "column", background: "var(--bg)", overflow: "hidden" }
+    : { position: "fixed", inset: 0, background: "var(--bg)", zIndex: 40, display: "flex", flexDirection: "column", overflowY: "auto" };
 
-      <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>{children}</div>
+  return (
+    <div style={rootStyle}>
+      {!hideTopBar && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 24px", borderBottom: "1px solid var(--border)", background: "rgba(13,15,16,0.85)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 100, flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button onClick={onBack} aria-label="Volver" style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "border-color 0.2s, color 0.2s" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.2)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>{title}</div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Elige un día y hora disponible</div>
+            </div>
+          </div>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 100, fontSize: 11.5, fontWeight: 500, background: badgeColors.bg, border: `1px solid ${badgeColors.border}`, color: badgeColors.color }}>
+            {badgeLabel}
+          </span>
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>{children}</div>
     </div>
   );
 }
