@@ -24,6 +24,14 @@ export const metadata: Metadata = {
   description:
     "Clases de programación, matemáticas e IA. Reserva una sesión o adquiere un pack de horas con descuento.",
   robots: { index: true, follow: true },
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: "/apple-touch-icon.png",
+    shortcut: "/favicon.svg",
+  },
 };
 
 export const viewport: Viewport = {
@@ -39,6 +47,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es" className={`${dmSans.variable} ${dmSerifDisplay.variable}`}>
+      <head>
+        <link rel="manifest" href="/site.webmanifest" />
+      </head>
       <body className={dmSans.className}>
         <AuthProvider>{children}</AuthProvider>
         <Analytics />
