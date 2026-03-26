@@ -1,12 +1,65 @@
+// src/features/landing/skill-icons.tsx
+
 import type { ReactNode } from "react";
 import { SKILL_ITEMS as RAW_ITEMS } from "@/constants/skills";
 
-function ProgrammingIcon({ size = 16 }: { size?: number }) {
+function CodeXmlIcon({ size = 16 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 94.504 94.504" fill="currentColor" aria-hidden="true">
-      <path d="M93.918,45.833L69.799,21.714c-0.75-0.75-2.077-0.75-2.827,0l-5.229,5.229c-0.781,0.781-0.781,2.047,0,2.828l17.477,17.475L61.744,64.724c-0.781,0.781-0.781,2.047,0,2.828l5.229,5.229c0.375,0.375,0.884,0.587,1.414,0.587c0.529,0,1.039-0.212,1.414-0.587l24.117-24.118C94.699,47.881,94.699,46.614,93.918,45.833z" />
-      <path d="M32.759,64.724L15.285,47.248l17.477-17.475c0.375-0.375,0.586-0.883,0.586-1.414c0-0.53-0.21-1.039-0.586-1.414l-5.229-5.229c-0.375-0.375-0.884-0.586-1.414-0.586c-0.53,0-1.039,0.211-1.414,0.586L0.585,45.833c-0.781,0.781-0.781,2.047,0,2.829L24.704,72.78c0.375,0.375,0.884,0.587,1.414,0.587c0.53,0,1.039-0.212,1.414-0.587l5.229-5.229C33.542,66.771,33.542,65.505,32.759,64.724z" />
-      <path d="M60.967,13.6c-0.254-0.466-0.682-0.812-1.19-0.962l-4.239-1.251c-1.058-0.314-2.172,0.293-2.484,1.352L33.375,79.382c-0.15,0.509-0.092,1.056,0.161,1.521c0.253,0.467,0.682,0.812,1.19,0.963l4.239,1.251c0.189,0.056,0.38,0.083,0.567,0.083c0.863,0,1.66-0.564,1.917-1.435l19.679-66.644C61.278,14.612,61.221,14.065,60.967,13.6z" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {/* < and > brackets with slash */}
+      <path d="m16 18 6-6-6-6" />
+      <path d="m8 6-6 6 6 6" />
+      <path d="m14 4-4 16" />
+    </svg>
+  );
+}
+
+function SigmaIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6a2 2 0 0 1 0 2.4l-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2" />
+    </svg>
+  );
+}
+
+function ChartScatterIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="7.5" cy="7.5" r="2.5" />
+      <circle cx="18.5" cy="14.5" r="2.5" />
+      <circle cx="11.5" cy="18.5" r="2.5" />
+      <circle cx="16.5" cy="4.5" r="2.5" />
+      <path d="M3 3v16a2 2 0 0 0 2 2h16" />
+    </svg>
+  );
+}
+
+function BrainIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {/* Left hemisphere */}
+      <path d="M9 4a3 3 0 0 0-3 3v1a3 3 0 0 0-2 3 3 3 0 0 0 2 3v1a3 3 0 0 0 3 3" />
+      <path d="M9 4a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3" />
+      
+      {/* Right hemisphere */}
+      <path d="M15 4a3 3 0 0 1 3 3v1a3 3 0 0 1 2 3 3 3 0 0 1-2 3v1a3 3 0 0 1-3 3" />
+      <path d="M15 4a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3" />
+      
+      {/* Inner folds */}
+      <path d="M9 8h.01" />
+      <path d="M15 8h.01" />
+      <path d="M9 12h.01" />
+      <path d="M15 12h.01" />
+    </svg>
+  );
+}
+
+function GraduationCapIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+      <path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5" />
+      <path d="M12 17v-4" />
     </svg>
   );
 }
@@ -19,12 +72,33 @@ function SpringBootIcon({ size = 16 }: { size?: number }) {
   );
 }
 
-const EMOJI_ICONS: ReactNode[] = ["📊", "🧮", "🌐", "🤖"];
+// ─── Map skills to their icons ────────────────────────────────────────────────
+
+// Order matches SKILL_ITEMS in constants/skills.ts:
+// 0: Programación con Python, Java, C y Haskell
+// 1: Desarrollo backend con Spring Boot
+// 2: Análisis de datos & Estadística
+// 3: Matemáticas Computacionales
+// 4: Ciclos formativos DAM y DAW
+// 5: Inteligencia Artificial
 
 function getIcon(index: number, size = 16): ReactNode {
-  if (index === 0) return <ProgrammingIcon size={size} />;
-  if (index === 1) return <SpringBootIcon size={size} />;
-  return EMOJI_ICONS[index - 2] ?? null;
+  switch (index) {
+    case 0:
+      return <CodeXmlIcon size={size} />;           // programación
+    case 1:
+      return <SpringBootIcon size={size} />;        // backend Spring Boot
+    case 2:
+      return <ChartScatterIcon size={size} />;      // análisis de datos
+    case 3:
+      return <SigmaIcon size={size} />;             // matemática computacional
+    case 4:
+      return <GraduationCapIcon size={size} />;     // ciclos formativos
+    case 5:
+      return <BrainIcon size={size} />;             // inteligencia artificial
+    default:
+      return null;
+  }
 }
 
 export const SKILL_ITEMS_DATA = RAW_ITEMS.map((item, i) => ({
