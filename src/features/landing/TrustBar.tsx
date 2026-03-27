@@ -1,135 +1,100 @@
-// Server Component — static layout + FooterModals client island.
-// The "Políticas", "Ayuda", and "Cancelaciones" columns are rendered by
-// FooterModals so they can open modals and dispatch the open-chat event.
+"use client";
 
-import FooterModals from "./FooterModals";
+/**
+ * TrustBar — Emerald Nocturne reskin
+ *
+ * Replaces the old trust bar with updated tokens and layout matching landing.html footer's
+ * trust section. Shown below the interactive booking shell.
+ */
 
 export default function TrustBar() {
   return (
-    <footer style={{ borderTop: "1px solid var(--border)", paddingTop: "2rem", marginTop: "2.5rem" }}>
+    <section
+      style={{
+        marginTop: "48px",
+        paddingTop: "32px",
+        borderTop: "1px solid rgba(255,255,255,0.05)",
+        animation: "fadeUp 0.6s ease both 0.9s",
+      }}
+    >
+      {/* ── Label ── */}
+      <p
+        style={{
+          fontSize: "10px",
+          fontWeight: 600,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          color: "#86948a",
+          textAlign: "center",
+          marginBottom: "20px",
+        }}
+      >
+        Pagos procesados de forma segura
+      </p>
 
-      <div className="footer-grid">
-        {/* Col 1 — Clases (static, RSC) */}
-        <div>
-          <p className="footer-col-label">Clases</p>
-          <a className="footer-link" href="#sessions">Encuentro inicial gratuito</a>
-          <a className="footer-link" href="#sessions">Sesiones individuales</a>
-          <a className="footer-link" href="#packs">Packs con descuento</a>
-        </div>
+      {/* ── Trust logos ── */}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "24px",
+          opacity: 0.45,
+          filter: "grayscale(1)",
+          transition: "opacity 0.4s, filter 0.4s",
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLElement).style.opacity = "0.8";
+          (e.currentTarget as HTMLElement).style.filter = "grayscale(0)";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLElement).style.opacity = "0.45";
+          (e.currentTarget as HTMLElement).style.filter = "grayscale(1)";
+        }}
+      >
+        {/* Stripe wordmark SVG (inline — avoids external image permission issues) */}
+        <svg height="20" viewBox="0 0 60 25" fill="#e5e1e4" aria-label="Stripe">
+          <path d="M5.45 9.55C5.45 8.36 6.43 7.9 8.06 7.9c2.31 0 4.61.7 6.48 1.95V3.29C12.7 2.44 10.24 2 7.84 2 3.21 2 0 4.42 0 9.83c0 8.37 11.53 7.03 11.53 10.64 0 1.41-1.22 1.87-2.93 1.87-2.53 0-5.76-.9-8.31-2.46v6.69C2.64 27.32 5.37 28 8.1 28c4.78 0 8.08-2.37 8.08-7.84-.02-9.04-10.73-7.45-10.73-10.61zM27.13 2.41l-4.3.92V7h-3.1v5.3h3.1v10c0 4.38 2.07 6.25 6.43 6.25 1.51 0 3.28-.23 4.54-.78v-5.18c-.93.4-2.13.62-3.17.62-1.33 0-3.5-.42-3.5-2.72V12.3h6.67V7h-6.67V2.41zm12.5 7.9c-1.98 0-3.29.93-4.01 1.58l-.27-1.27h-5.1v25.02l5.78-1.23V29.3c.75.54 1.85 1.3 3.67 1.3 3.71 0 7.09-2.98 7.09-9.56-.02-6-3.43-10.73-7.16-10.73zm-1.26 16.11c-1.22 0-1.94-.43-2.44-.96V17.4c.54-.58 1.28-1 2.44-1 1.87 0 3.16 2.09 3.16 5.02 0 3.01-1.27 5.0-3.16 5.0zM54.3 7h-5.84v21.28h5.84V7zM51.4 0c-1.87 0-3.37 1.5-3.37 3.37 0 1.87 1.5 3.37 3.37 3.37 1.87 0 3.37-1.5 3.37-3.37C54.77 1.5 53.27 0 51.4 0z"/>
+        </svg>
 
-        {/* Cols 2–4 — interactive columns (client island) */}
-        <FooterModals />
+        {/* Visa */}
+        <svg height="16" viewBox="0 0 60 20" fill="#e5e1e4" aria-label="Visa">
+          <path d="M26.9 1.1L24.5 18.9H20.3L22.7 1.1H26.9ZM44.9 12.7L47.2 6.2L48.5 12.7H44.9ZM49.7 18.9H53.7L50.2 1.1H46.6C45.8 1.1 45.1 1.6 44.8 2.3L38.4 18.9H42.7L43.6 16.3H48.9L49.7 18.9ZM38.9 13.3C38.9 9 32.7 8.8 32.8 6.9C32.8 6.3 33.3 5.7 34.6 5.5C35.2 5.4 36.9 5.3 38.8 6.2L39.6 2.4C38.6 2 37.3 1.7 35.7 1.7C31.7 1.7 28.9 3.9 28.9 7.1C28.9 9.4 31 10.7 32.5 11.4C34.1 12.2 34.6 12.7 34.6 13.4C34.6 14.4 33.4 14.9 32.4 14.9C30.3 14.9 29.1 14.3 28.1 13.8L27.3 17.7C28.3 18.2 30.1 18.6 32 18.6C36.3 18.6 39 16.4 39 12.9L38.9 13.3ZM21.3 1.1L14.7 18.9H10.3L7.1 4.3C6.9 3.4 6.7 3 6 2.7C4.9 2.1 3 1.6 1.4 1.3L1.5 1.1H8.8C9.7 1.1 10.5 1.7 10.7 2.7L12.4 12.2L16.7 1.1H21.3Z"/>
+        </svg>
+
+        {/* Mastercard */}
+        <svg height="22" viewBox="0 0 38 24" aria-label="Mastercard">
+          <rect width="15" height="24" x="0" y="0" fill="#e5e1e4" rx="2"/>
+          <rect width="15" height="24" x="23" y="0" fill="#bbcabf" rx="2"/>
+          <path fill="#e5e1e4" d="M19 4.3a10 10 0 0 1 0 15.4A10 10 0 0 1 19 4.3z"/>
+        </svg>
       </div>
 
-      {/* Bottom strip — payment badges + copyright */}
-      <div className="footer-bottom">
-        <div className="footer-payment-row">
-          <span className="footer-secure-badge">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="var(--green)" aria-hidden="true">
-              <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM12 17c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2z"/>
-            </svg>
-            Pago seguro · Stripe
-          </span>
-
-          <span className="footer-card-chip" aria-label="Visa">
-            <svg width="32" height="11" viewBox="0 0 50 17" aria-hidden="true">
-              <text x="0" y="14" fontSize="16" fontWeight="800" fontFamily="Arial,sans-serif" fill="#1A1F71">VISA</text>
-            </svg>
-          </span>
-
-          <span className="footer-card-chip" aria-label="Mastercard">
-            <svg width="28" height="18" viewBox="0 0 38 24" aria-hidden="true">
-              <circle cx="14" cy="12" r="8" fill="#EB001B"/>
-              <circle cx="24" cy="12" r="8" fill="#F79E1B"/>
-              <path d="M19 5.6a8 8 0 0 1 0 12.8A8 8 0 0 1 19 5.6z" fill="#FF5F00"/>
-            </svg>
-          </span>
-
-          <span className="footer-card-chip" aria-label="American Express">
-            <svg width="28" height="18" viewBox="0 0 38 24" aria-hidden="true">
-              <rect width="38" height="24" rx="3" fill="#016FD0"/>
-              <text x="4" y="17" fontSize="9" fontWeight="700" fontFamily="Arial,sans-serif" fill="white">AMEX</text>
-            </svg>
-          </span>
-        </div>
-
-        <p className="footer-legal">
-          © {new Date().getFullYear()} Gustavo Torres Guerrero · Santander, España
-        </p>
+      {/* ── Meta info ── */}
+      <div
+        style={{
+          marginTop: "24px",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "16px",
+          justifyContent: "center",
+        }}
+      >
+        {[
+          { icon: "🔒", text: "Pago 100% seguro con Stripe" },
+          { icon: "↩️", text: "Cancelación hasta 2h antes" },
+          { icon: "📧", text: "Confirmación inmediata por email" },
+        ].map((item) => (
+          <div
+            key={item.text}
+            style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11.5px", color: "#86948a" }}
+          >
+            <span>{item.icon}</span>
+            <span>{item.text}</span>
+          </div>
+        ))}
       </div>
-
-      <style>{`
-        .footer-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 1.5rem 2rem;
-          padding-bottom: 1.5rem;
-          border-bottom: 1px solid var(--border);
-        }
-        @media (max-width: 600px) {
-          .footer-grid { grid-template-columns: 1fr 1fr; }
-        }
-        @media (max-width: 380px) {
-          .footer-grid { grid-template-columns: 1fr; }
-        }
-        .footer-col-label {
-          font-size: 11px;
-          font-weight: 500;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          color: var(--text-dim);
-          margin-bottom: 10px;
-        }
-        .footer-link {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 13px;
-          color: var(--text-muted);
-          text-decoration: none;
-          padding: 3px 0;
-          line-height: 1.55;
-          transition: color 0.15s;
-        }
-        .footer-link:hover { color: var(--text); }
-        .footer-bottom {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          justify-content: space-between;
-          gap: 1rem;
-          padding: 1.25rem 0 0.5rem;
-        }
-        .footer-payment-row {
-          display: flex;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 10px;
-        }
-        .footer-secure-badge {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          font-size: 12px;
-          color: var(--text-muted);
-          padding-right: 10px;
-          border-right: 1px solid var(--border);
-        }
-        .footer-card-chip {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 4px 8px;
-          border: 1px solid var(--border);
-          border-radius: 6px;
-          background: rgba(255,255,255,0.03);
-          line-height: 1;
-        }
-        .footer-legal {
-          font-size: 11.5px;
-          color: var(--text-dim);
-        }
-      `}</style>
-    </footer>
+    </section>
   );
 }

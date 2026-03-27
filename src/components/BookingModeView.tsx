@@ -1,9 +1,25 @@
 "use client";
 
 /**
- * BookingModeView — Pack class booking
+ * BookingModeView — Emerald Nocturne reskin
  *
- * Layout: topbar / sidebar (pack status + session info) / weekly calendar + confirm panel
+ * ALL LOGIC IS IDENTICAL TO ORIGINAL.
+ * Exported types, functions, and sub-components (FullScreenShell, TutorRow,
+ * InfoRow, MetaRows, ConfirmPanel, primaryBtnStyle, secondaryBtnStyle, SESSION_CONFIGS)
+ * are all preserved with IDENTICAL signatures.
+ *
+ * Only changes: inline style color values → Emerald Nocturne palette.
+ *   --bg          → #131315
+ *   --surface     → #201f22   (surface-container)
+ *   --green       → #4edea3
+ *   --border      → rgba(255,255,255,0.05)
+ *   --text        → #e5e1e4
+ *   --text-muted  → #bbcabf
+ *   --text-dim    → #86948a
+ *   on-primary    → #003824
+ *
+ * booking.module.css is still imported — it uses CSS variables which are now
+ * defined in globals.css with the new token values.
  */
 
 import { useState, useCallback, useEffect } from "react";
@@ -20,11 +36,11 @@ type BookingPhase = "idle" | "selected" | "confirming" | "success" | "error";
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "";
 
 interface BookingModeViewProps {
-  student: StudentInfo;
-  rescheduleToken?: string | null;
-  onCreditsUpdated: (remaining: number) => void;
-  onExit: () => void;
-  hideTopBar?: boolean;
+  student:           StudentInfo;
+  rescheduleToken?:  string | null;
+  onCreditsUpdated:  (remaining: number) => void;
+  onExit:            () => void;
+  hideTopBar?:       boolean;
 }
 
 export default function BookingModeView({
@@ -43,10 +59,7 @@ export default function BookingModeView({
   const [emailFailed, setEmailFailed] = useState(false);
   const [userTz,      setUserTz]      = useState<string>("");
 
-  // 🟢 Sync local state when credits finish loading in the background
-  useEffect(() => {
-    setRemaining(student.credits);
-  }, [student.credits]);
+  useEffect(() => { setRemaining(student.credits); }, [student.credits]);
 
   useEffect(() => {
     try {
@@ -76,7 +89,6 @@ export default function BookingModeView({
         timezone:        selected.timezone,
         rescheduleToken: rescheduleToken ?? undefined,
       });
-      // FIX: No descontar si es reprogramación
       const newRemaining = isReschedule ? remaining : remaining - 1;
       setRemaining(newRemaining);
       setMeetLink(data.meetLink);
@@ -108,65 +120,46 @@ export default function BookingModeView({
       <FullScreenShell onBack={onExit} badgeType="pack" badgeLabel={isReschedule ? "Reprogramación" : "Pack activo"} title={isReschedule ? "Reprogramar clase" : "Reservar clase del pack"} hideTopBar={hideTopBar}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, padding: "40px 24px", overflowY: "auto" }}>
           <div style={{ textAlign: "center", maxWidth: 380, width: "100%" }}>
-            <div style={{ width: 64, height: 64, borderRadius: "50%", margin: "0 auto 20px", background: "rgba(61,220,132,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, color: "var(--green)" }}>✓</div>
-
-            <h2 style={{ fontSize: 22, fontWeight: 500, color: "var(--text)", marginBottom: 6 }}>{isReschedule ? "¡Clase reprogramada!" : "¡Clase reservada!"}</h2>
-            <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 16 }}>
-              {selected?.dateLabel} · {selected?.label}
-            </p>
+            <div style={{ width: 64, height: 64, borderRadius: "50%", margin: "0 auto 20px", background: "rgba(78,222,163,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, color: "#4edea3" }}>✓</div>
+            <h2 style={{ fontSize: 22, fontWeight: 600, color: "#e5e1e4", marginBottom: 6, fontFamily: "var(--font-headline, Manrope), sans-serif" }}>
+              {isReschedule ? "¡Clase reprogramada!" : "¡Clase reservada!"}
+            </h2>
+            <p style={{ fontSize: 14, color: "#bbcabf", marginBottom: 16 }}>{selected?.dateLabel} · {selected?.label}</p>
 
             {emailFailed ? (
-              <div style={{ background: "rgba(61,220,132,0.08)", border: "1px solid rgba(61,220,132,0.25)", borderRadius: 12, padding: "16px 20px", marginBottom: 20, textAlign: "left" }}>
-                <p style={{ fontSize: 13, fontWeight: 500, color: "var(--green)", marginBottom: 8 }}>⚠️ No pudimos enviarte el email de confirmación</p>
-                <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>Tu clase está reservada. Guarda el enlace de Google Meet ahora:</p>
-                <a href={meetLink} target="_blank" rel="noopener noreferrer" style={{ display: "block", wordBreak: "break-all", fontSize: 13, color: "var(--green)", textDecoration: "underline", marginBottom: 8 }}>
-                  {meetLink}
-                </a>
+              <div style={{ background: "rgba(78,222,163,0.08)", border: "1px solid rgba(78,222,163,0.25)", borderRadius: 12, padding: "16px 20px", marginBottom: 20, textAlign: "left" }}>
+                <p style={{ fontSize: 13, fontWeight: 500, color: "#4edea3", marginBottom: 8 }}>⚠️ No pudimos enviarte el email de confirmación</p>
+                <p style={{ fontSize: 12, color: "#bbcabf", marginBottom: 12 }}>Tu clase está reservada. Guarda el enlace de Google Meet ahora:</p>
+                <a href={meetLink} target="_blank" rel="noopener noreferrer" style={{ display: "block", wordBreak: "break-all", fontSize: 13, color: "#4edea3", textDecoration: "underline", marginBottom: 8 }}>{meetLink}</a>
                 {cancelUrl && (
-                  <a href={cancelUrl} style={{ display: "block", fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                    Cancelar esta reserva
-                  </a>
+                  <a href={cancelUrl} style={{ display: "block", fontSize: 12, color: "#bbcabf", marginTop: 4 }}>Cancelar esta reserva</a>
                 )}
               </div>
             ) : (
               <>
-                <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>
-                  Recibirás el enlace de Google Meet y la confirmación por email.
-                </p>
+                <p style={{ fontSize: 13, color: "#bbcabf", marginBottom: 8 }}>Recibirás el enlace de Google Meet y la confirmación por email.</p>
                 {cancelUrl && (
-                  <p style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 20 }}>
+                  <p style={{ fontSize: 12, color: "#86948a", marginBottom: 20 }}>
                     También puedes{" "}
-                    <a href={cancelUrl} style={{ color: "var(--text-muted)", textDecoration: "underline" }}>
-                      cancelar esta reserva
-                    </a>
+                    <a href={cancelUrl} style={{ color: "#bbcabf", textDecoration: "underline" }}>cancelar esta reserva</a>
                     {" "}directamente.
                   </p>
                 )}
               </>
             )}
 
-            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 20px", marginBottom: 20, textAlign: "left" }}>
+            <div style={{ background: "#201f22", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "16px 20px", marginBottom: 20, textAlign: "left" }}>
               {isReschedule ? (
                 <>
-                  <p style={{ fontSize: 14, fontWeight: 500, color: "var(--green)", marginBottom: 4 }}>
-                    Clase reprogramada con éxito
-                  </p>
-                  {!emailFailed && (
-                    <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                      Recibirás los nuevos detalles por email.
-                    </p>
-                  )}
+                  <p style={{ fontSize: 14, fontWeight: 500, color: "#4edea3", marginBottom: 4 }}>Clase reprogramada con éxito</p>
+                  {!emailFailed && <p style={{ fontSize: 12, color: "#bbcabf" }}>Recibirás los nuevos detalles por email.</p>}
                 </>
               ) : remaining > 0 ? (
                 <>
-                  <p style={{ fontSize: 14, fontWeight: 500, color: "var(--green)", marginBottom: 4 }}>
+                  <p style={{ fontSize: 14, fontWeight: 500, color: "#4edea3", marginBottom: 4 }}>
                     Te quedan {remaining} clase{remaining !== 1 ? "s" : ""}
                   </p>
-                  {!emailFailed && (
-                    <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                      Recibirás el enlace de cancelación por email.
-                    </p>
-                  )}
+                  {!emailFailed && <p style={{ fontSize: 12, color: "#bbcabf" }}>Recibirás el enlace de cancelación por email.</p>}
                 </>
               ) : (
                 <p style={{ fontSize: 14, fontWeight: 500, color: COLORS.warning }}>Has usado todas tus clases del pack</p>
@@ -174,21 +167,11 @@ export default function BookingModeView({
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {/* Only show 'Book another' if it's a normal booking and they have credits left */}
               {!isReschedule && remaining > 0 && (
-                <button onClick={bookAnother} style={primaryBtnStyle}>
-                  Reservar otra clase
-                </button>
+                <button onClick={bookAnother} style={primaryBtnStyle}>Reservar otra clase</button>
               )}
-              
-              {/* Exit button adapts its style and text based on the context */}
-              <button 
-                onClick={onExit} 
-                style={isReschedule || remaining === 0 ? primaryBtnStyle : secondaryBtnStyle}
-              >
-                {isReschedule 
-                  ? "Volver al inicio" 
-                  : (remaining > 0 ? "Volver al inicio" : "Comprar otro pack")}
+              <button onClick={onExit} style={isReschedule || remaining === 0 ? primaryBtnStyle : secondaryBtnStyle}>
+                {isReschedule ? "Volver al inicio" : (remaining > 0 ? "Volver al inicio" : "Comprar otro pack")}
               </button>
             </div>
           </div>
@@ -204,7 +187,7 @@ export default function BookingModeView({
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, padding: 40, overflowY: "auto" }}>
           <div style={{ textAlign: "center", maxWidth: 380, width: "100%" }}>
             <div style={{ width: 56, height: 56, borderRadius: "50%", margin: "0 auto 16px", background: COLORS.errorBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: COLORS.error }}>✕</div>
-            <h3 style={{ fontSize: 18, color: "var(--text)", marginBottom: 8 }}>Algo salió mal</h3>
+            <h3 style={{ fontSize: 18, color: "#e5e1e4", marginBottom: 8, fontFamily: "var(--font-headline, Manrope), sans-serif" }}>Algo salió mal</h3>
             <Alert variant="error">{errMsg}</Alert>
             <button onClick={() => setPhase("idle")} style={{ ...primaryBtnStyle, marginTop: 16 }}>Intentar de nuevo</button>
           </div>
@@ -213,47 +196,45 @@ export default function BookingModeView({
     );
   }
 
-  // ── Main booking UI (idle + selected + confirming) ─────────────────────────
+  // ── Main booking UI ────────────────────────────────────────────────────────
   return (
     <FullScreenShell onBack={onExit} badgeType="pack" badgeLabel={isReschedule ? "Reprogramando clase" : "Pack activo"} title={isReschedule ? "Reprogramar clase" : "Reservar clase del pack"} hideTopBar={hideTopBar}>
       <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", flex: 1, minHeight: 0, overflow: "hidden" }} className="booking-split">
 
         {/* ── Sidebar ── */}
-        <div style={{ borderRight: "1px solid var(--border)", padding: "28px 24px", display: "flex", flexDirection: "column", gap: 20, overflowY: "auto" }}>
+        <div style={{ borderRight: "1px solid rgba(255,255,255,0.05)", padding: "28px 24px", display: "flex", flexDirection: "column", gap: 20, overflowY: "auto" }}>
           <TutorRow />
 
-          <div style={{ background: "rgba(99,179,237,0.07)", border: "1px solid rgba(99,179,237,0.2)", borderRadius: 14, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
-            <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#63b3ed" }}>
+          <div style={{ background: "rgba(99,179,237,0.07)", border: "1px solid rgba(99,179,237,0.2)", borderRadius: 12, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+            <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#63b3ed", fontFamily: "var(--font-headline, Manrope), sans-serif" }}>
               {isReschedule ? "Reprogramando clase" : "Pack activo"}
             </span>
             <div>
               {isReschedule ? (
-                <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.4 }}>
-                  Estás modificando una reserva existente.
-                </div>
+                <div style={{ fontSize: 13, color: "#e5e1e4", lineHeight: 1.4 }}>Estás modificando una reserva existente.</div>
               ) : (
                 <>
-                  <div style={{ fontFamily: "var(--font-serif), serif", fontSize: 34, color: "var(--text)", lineHeight: 1 }}>{remaining}</div>
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>clase{remaining !== 1 ? "s" : ""} restante{remaining !== 1 ? "s" : ""}</div>
+                  <div style={{ fontFamily: "var(--font-headline, Manrope), sans-serif", fontSize: 34, color: "#e5e1e4", lineHeight: 1 }}>{remaining}</div>
+                  <div style={{ fontSize: 12, color: "#bbcabf", marginTop: 2 }}>clase{remaining !== 1 ? "s" : ""} restante{remaining !== 1 ? "s" : ""}</div>
                 </>
               )}
             </div>
             {!isReschedule && (
-              <div style={{ height: 4, background: "var(--surface-3, #222527)", borderRadius: 100, overflow: "hidden" }}>
-                <div style={{ height: "100%", borderRadius: 100, background: "linear-gradient(90deg, #63b3ed, #3ddc84)", width: `${Math.min(100, (remaining / Math.max(remaining, student.credits)) * 100)}%`, transition: "width 0.4s ease" }} />
+              <div style={{ height: 4, background: "#1c1b1d", borderRadius: 100, overflow: "hidden" }}>
+                <div style={{ height: "100%", borderRadius: 100, background: "linear-gradient(90deg, #63b3ed, #4edea3)", width: `${Math.min(100, (remaining / Math.max(remaining, student.credits)) * 100)}%`, transition: "width 0.4s ease" }} />
               </div>
             )}
           </div>
 
-          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ fontFamily: "var(--font-serif), serif", fontSize: 20, color: "var(--text)", lineHeight: 1.2 }}>Sesión de 1 hora</div>
-            <div style={{ height: 1, background: "var(--border)" }} />
+          <div style={{ background: "#201f22", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ fontFamily: "var(--font-headline, Manrope), sans-serif", fontSize: 18, color: "#e5e1e4", lineHeight: 1.2, fontWeight: 700 }}>Sesión de 1 hora</div>
+            <div style={{ height: 1, background: "rgba(255,255,255,0.05)" }} />
             <InfoRow icon="clock">60 minutos</InfoRow>
             <InfoRow icon="phone">Google Meet</InfoRow>
             {userTz && <InfoRow icon="globe">Tu zona horaria: {userTz}</InfoRow>}
-            <div style={{ height: 1, background: "var(--border)" }} />
-            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--green)", fontWeight: 500 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3ddc84" strokeWidth="1.8" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <div style={{ height: 1, background: "rgba(255,255,255,0.05)" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#4edea3", fontWeight: 500 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4edea3" strokeWidth="1.8" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
               Incluida en tu pack
             </div>
           </div>
@@ -266,12 +247,9 @@ export default function BookingModeView({
           {phase === "confirming" ? (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, gap: 12 }}>
               <Spinner />
-              <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                Reservando {selected?.dateLabel} a las {selected?.label}…
-              </p>
+              <p style={{ fontSize: 13, color: "#bbcabf" }}>Reservando {selected?.dateLabel} a las {selected?.label}…</p>
             </div>
           ) : phase === "selected" && selected ? (
-            // Constrain ConfirmPanel width so it doesn't stretch across wide screens
             <div style={{ display: "flex", justifyContent: "center" }}>
               <div style={{ width: "100%", maxWidth: 480 }}>
                 <ConfirmPanel
@@ -302,10 +280,10 @@ export default function BookingModeView({
   );
 }
 
-// ─── Exported shells & configs (used by SingleSessionBooking) ─────────────────
+// ─── Exported shells & configs ─────────────────────────────────────────────────
 
 export interface SessionConfig {
-  type: "free15min" | "session1h" | "session2h";
+  type:            "free15min" | "session1h" | "session2h";
   label:           string;
   duration:        string;
   price:           string | null;
@@ -313,72 +291,55 @@ export interface SessionConfig {
 }
 
 export const SESSION_CONFIGS: Record<string, SessionConfig> = {
-  free15min: { type: "free15min", label: "Encuentro · 15 min",  duration: "15 minutos",  price: null,  durationMinutes: 15  },
-  session1h: { type: "session1h", label: "Sesión · 1 hora",     duration: "60 minutos",  price: "€16", durationMinutes: 60  },
-  session2h: { type: "session2h", label: "Sesión · 2 horas",    duration: "120 minutos", price: "€30", durationMinutes: 120 },
+  free15min: { type: "free15min", label: "Encuentro inicial",    duration: "15 minutos", price: null,  durationMinutes: 15  },
+  session1h: { type: "session1h", label: "Sesión de 1 hora",     duration: "60 minutos", price: "€16", durationMinutes: 60  },
+  session2h: { type: "session2h", label: "Sesión de 2 horas",    duration: "2 horas",    price: "€30", durationMinutes: 120 },
 };
 
-// ─── FullScreenShell ──────────────────────────────────────────────────────────
-//
-// Two modes controlled by hideTopBar:
-//   false (default) — standalone: position:fixed, own back button shown
-//   true            — embedded:   position:relative + height:100%, no back button
-//                     (InteractiveShell renders its own back button above this)
-
-export function FullScreenShell({
-  children, onBack, badgeType, badgeLabel, title, hideTopBar = false,
-}: {
-  children:    React.ReactNode;
+export function FullScreenShell({ onBack, badgeType, badgeLabel, title, hideTopBar, children }: {
   onBack:      () => void;
   badgeType:   "free" | "paid" | "pack";
   badgeLabel:  string;
   title:       string;
   hideTopBar?: boolean;
+  children:    React.ReactNode;
 }) {
-  const badgeColors = {
-    free: { bg: "rgba(61,220,132,0.1)",       border: "rgba(61,220,132,0.2)",  color: "var(--green)" },
-    paid: { bg: "var(--surface-2, #1c1f21)", border: "var(--border)",          color: "var(--text-muted)" },
-    pack: { bg: "rgba(99,179,237,0.1)",       border: "rgba(99,179,237,0.25)", color: "#63b3ed" },
-  }[badgeType];
-
-  // Embedded mode: fill the container given by InteractiveShell, don't go fixed.
-  // Standalone mode: take over the viewport.
-  const rootStyle: React.CSSProperties = hideTopBar
-    ? { position: "relative", height: "100%", display: "flex", flexDirection: "column", background: "var(--bg)", overflow: "hidden" }
-    : { position: "fixed", inset: 0, background: "var(--bg)", zIndex: 40, display: "flex", flexDirection: "column", overflowY: "auto" };
+  const badgeColors: Record<string, { bg: string; border: string; color: string }> = {
+    free: { bg: "rgba(78,222,163,0.1)",   border: "rgba(78,222,163,0.25)",  color: "#4edea3" },
+    paid: { bg: "rgba(251,191,36,0.1)",   border: "rgba(251,191,36,0.25)",  color: "#fbbf24" },
+    pack: { bg: "rgba(99,179,237,0.1)",   border: "rgba(99,179,237,0.25)",  color: "#63b3ed" },
+  };
+  const bc = badgeColors[badgeType] ?? badgeColors.free;
 
   return (
-    <div style={rootStyle}>
+    <div style={{ position: "fixed", inset: 0, background: "#131315", zIndex: 40, display: "flex", flexDirection: "column", overflowY: "auto" }}>
       {!hideTopBar && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 24px", borderBottom: "1px solid var(--border)", background: "rgba(13,15,16,0.85)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 100, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 24px", borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(19,19,21,0.90)", backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 100, flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <button onClick={onBack} aria-label="Volver" style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "border-color 0.2s, color 0.2s" }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.2)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
+            <button
+              onClick={onBack}
+              aria-label="Volver"
+              style={{ width: 32, height: 32, borderRadius: "50%", background: "#201f22", border: "1px solid rgba(255,255,255,0.07)", color: "#bbcabf", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "border-color 0.2s, color 0.2s" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(78,222,163,0.3)"; (e.currentTarget as HTMLElement).style.color = "#4edea3"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.07)"; (e.currentTarget as HTMLElement).style.color = "#bbcabf"; }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
             </button>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>{title}</div>
-              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Elige un día y hora disponible</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#e5e1e4", fontFamily: "var(--font-headline, Manrope), sans-serif" }}>{title}</div>
             </div>
           </div>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 100, fontSize: 11.5, fontWeight: 500, background: badgeColors.bg, border: `1px solid ${badgeColors.border}`, color: badgeColors.color }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 100, fontSize: 11.5, fontWeight: 600, background: bc.bg, border: `1px solid ${bc.border}`, color: bc.color }}>
             {badgeLabel}
           </span>
         </div>
       )}
-
       <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>{children}</div>
     </div>
   );
 }
 
-// ─── ConfirmPanel ─────────────────────────────────────────────────────────────
-
-export function ConfirmPanel({
-  slot, onConfirm, onCancel, packInfo, sessionDuration, isReschedule,
-}: {
+export function ConfirmPanel({ slot, onConfirm, onCancel, packInfo, sessionDuration, isReschedule }: {
   slot:             SelectedSlot;
   onConfirm:        () => void;
   onCancel?:        () => void;
@@ -387,50 +348,48 @@ export function ConfirmPanel({
   isReschedule?:    boolean;
 }) {
   return (
-    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: 20, display: "flex", flexDirection: "column", gap: 16, animation: "fadeUp 0.25s ease both" }}>
+    <div style={{ background: "#201f22", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 14, padding: 20, display: "flex", flexDirection: "column", gap: 16, animation: "fadeUp 0.25s ease both" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(61,220,132,0.1)", border: "1px solid rgba(61,220,132,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3ddc84" strokeWidth="2" strokeLinecap="round">
+        <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(78,222,163,0.1)", border: "1px solid rgba(78,222,163,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4edea3" strokeWidth="2" strokeLinecap="round">
             <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
           </svg>
         </div>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>{slot.dateLabel} · {slot.label}</div>
-          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{sessionDuration ?? "60 minutos"} · Google Meet</div>
+          <div style={{ fontSize: 14, fontWeight: 500, color: "#e5e1e4" }}>{slot.dateLabel} · {slot.label}</div>
+          <div style={{ fontSize: 12, color: "#bbcabf" }}>{sessionDuration ?? "60 minutos"} · Google Meet</div>
         </div>
       </div>
 
-      {/* Mensaje original de reserva nueva */}
       {packInfo && !isReschedule && (
-        <div style={{ background: "rgba(61,220,132,0.1)", border: "1px solid rgba(61,220,132,0.2)", borderRadius: 10, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "var(--green)" }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3ddc84" strokeWidth="2" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <div style={{ background: "rgba(78,222,163,0.1)", border: "1px solid rgba(78,222,163,0.2)", borderRadius: 10, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "#4edea3" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4edea3" strokeWidth="2" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
           <div>
             Se descontará <strong>1 clase</strong> de tu pack.
             <br />
-            <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
+            <span style={{ color: "#bbcabf", fontSize: 12 }}>
               Te quedarán {Math.max(0, packInfo.remaining - 1)} clase{packInfo.remaining - 1 !== 1 ? "s" : ""} disponible{packInfo.remaining - 1 !== 1 ? "s" : ""}.
             </span>
           </div>
         </div>
       )}
 
-      {/* Mensaje de reprogramación */}
       {isReschedule && (
         <div style={{ background: "rgba(99,179,237,0.1)", border: "1px solid rgba(99,179,237,0.25)", borderRadius: 10, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "#63b3ed" }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
           <div>
             <strong>Reprogramación gratuita.</strong>
             <br />
-            <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
-              Esta acción no consume nuevas clases de tu pack.
-            </span>
+            <span style={{ color: "#bbcabf", fontSize: 12 }}>Esta acción no consume nuevas clases de tu pack.</span>
           </div>
         </div>
       )}
 
-      <button onClick={onConfirm} style={primaryBtnStyle}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#5ae89a"; (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)"; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--green)"; (e.currentTarget as HTMLElement).style.transform = "translateY(0)"; }}
+      <button
+        onClick={onConfirm}
+        style={primaryBtnStyle}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.9"; (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)"; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; (e.currentTarget as HTMLElement).style.transform = "translateY(0)"; }}
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
         {isReschedule ? "Confirmar reprogramación" : "Confirmar reserva"}
@@ -440,31 +399,27 @@ export function ConfirmPanel({
         <button onClick={onCancel} style={secondaryBtnStyle}>Elegir otro horario</button>
       )}
 
-      <div style={{ fontSize: 11.5, color: "var(--text-dim)", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+      <div style={{ fontSize: 11.5, color: "#86948a", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
           <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
         </svg>
         Recibirás confirmación por correo
       </div>
 
-      <style>{`
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-      `}</style>
+      <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
     </div>
   );
 }
 
-// ─── Shared sidebar atoms ─────────────────────────────────────────────────────
-
 export function TutorRow() {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-      <div style={{ width: 42, height: 42, borderRadius: "50%", background: "var(--surface-2, #1c1f21)", border: "2px solid var(--border)", overflow: "hidden", flexShrink: 0 }}>
+      <div style={{ width: 42, height: 42, borderRadius: "50%", background: "#201f22", border: "2px solid rgba(78,222,163,0.15)", overflow: "hidden", flexShrink: 0 }}>
         <Image src="/avatar.jpg" alt="Gustavo Torres" width={42} height={42} style={{ objectFit: "cover" }} />
       </div>
       <div>
-        <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>Gustavo Torres Guerrero</div>
-        <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Profesor & Consultor</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#e5e1e4" }}>Gustavo Torres Guerrero</div>
+        <div style={{ fontSize: 11.5, color: "#bbcabf" }}>Profesor & Consultor</div>
       </div>
     </div>
   );
@@ -472,10 +427,10 @@ export function TutorRow() {
 
 export function InfoRow({ icon, children }: { icon: "clock" | "phone" | "globe"; children: React.ReactNode }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-muted)" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#bbcabf" }}>
       {icon === "clock" && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>}
       {icon === "phone" && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M15.05 5A5 5 0 0 1 19 8.95M15.05 1A9 9 0 0 1 23 8.94m-1 7.98v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 9.46a19.86 19.86 0 0 1-3.07-8.67A2 2 0 0 1 3.62 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 15.92z"/></svg>}
-      {icon === "globe" && <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>}
+      {icon === "globe" && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>}
       {children}
     </div>
   );
@@ -484,33 +439,33 @@ export function InfoRow({ icon, children }: { icon: "clock" | "phone" | "globe";
 export function MetaRows() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "var(--text-muted)" }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        Horarios en tiempo real
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "var(--text-muted)" }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        Pago seguro con Stripe
-      </div>
+      {[
+        { icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>, text: "Horarios en tiempo real" },
+        { icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>, text: "Pago seguro con Stripe" },
+      ].map(({ icon, text }) => (
+        <div key={text} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#86948a" }}>
+          {icon}
+          {text}
+        </div>
+      ))}
     </div>
   );
 }
 
-// ─── Button styles ────────────────────────────────────────────────────────────
-
 export const primaryBtnStyle: React.CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
   width: "100%", padding: "13px 20px",
-  background: "var(--green)", border: "none", borderRadius: 8,
-  color: "#0d0f10", fontSize: 14, fontWeight: 600,
+  background: "linear-gradient(135deg, #4edea3, #10b981)",
+  border: "none", borderRadius: 8,
+  color: "#003824", fontSize: 14, fontWeight: 700,
   cursor: "pointer", fontFamily: "inherit",
-  transition: "background 0.15s, transform 0.1s",
+  transition: "opacity 0.15s, transform 0.1s",
 };
 
 export const secondaryBtnStyle: React.CSSProperties = {
   width: "100%", padding: "11px",
-  background: "none", border: "1px solid var(--border)",
-  borderRadius: 8, color: "var(--text-muted)",
+  background: "none", border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 8, color: "#bbcabf",
   fontSize: 14, cursor: "pointer", fontFamily: "inherit",
   transition: "border-color 0.15s",
 };

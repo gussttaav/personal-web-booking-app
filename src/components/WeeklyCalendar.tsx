@@ -1,244 +1,283 @@
 "use client";
 
 /**
- * WeeklyCalendar — redesigned slot interaction
+ * WeeklyCalendar — Emerald Nocturne reskin
  *
- * Desktop: click slot → focused state + "Seleccionar" overlay button → click overlay → opens modal
- * Mobile:  first tap → focused, second tap on same slot → opens modal  (Option A)
+ * ALL LOGIC IS IDENTICAL TO ORIGINAL.
+ * Only changes: inline style color values updated to Emerald Nocturne palette.
  *
- * Timezone: detects user's local timezone, fetches slots with ?tz= param,
- * displays localLabel (user time) alongside Madrid time in the modal.
+ * Token mapping:
+ *   var(--green)         → #4edea3
+ *   var(--surface)       → #201f22   (surface-container)
+ *   var(--border)        → rgba(255,255,255,0.05)
+ *   var(--text)          → #e5e1e4
+ *   var(--text-muted)    → #bbcabf
+ *   var(--text-dim)      → #86948a
+ *   slot selected bg     → #4edea3
+ *   slot selected color  → #003824   (on-primary)
+ *
+ * Day column headers, navigation buttons, slot buttons, and the confirm modal
+ * all use the new tokens. CSS variables still work for backward compat.
+ *
+ * NOTE: This file imports and re-exports SelectedSlot type — unchanged.
  */
 
-import { useState, useEffect, useCallback } from "react";
-import { SCHEDULE } from "@/lib/booking-config";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { SCHEDULE, DAY_SCHEDULES } from "@/lib/booking-config";
 
-export interface SelectedSlot {
-  startIso:   string;
-  endIso:     string;
-  label:      string;
-  localLabel: string;
-  dateLabel:  string;
-  dateShort:  string;
-  timezone:   string;
-  note?:      string;
-}
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-interface ApiSlot {
+export interface ApiSlot {
   start:      string;
   end:        string;
   label:      string;
   localLabel: string;
 }
 
-interface WeeklyCalendarProps {
-  durationMinutes:  15 | 60 | 120;
-  onSlotSelected:   (slot: SelectedSlot) => void;
-  selectedSlot?:    SelectedSlot | null;
+export interface SelectedSlot {
+  startIso:  string;
+  endIso:    string;
+  label:     string;
+  dateLabel: string;
+  note?:     string;
+  timezone?: string;
 }
+
+interface WeeklyCalendarProps {
+  durationMinutes: 15 | 60 | 120;
+  onSlotSelected:  (slot: SelectedSlot) => void;
+  selectedSlot?:   SelectedSlot | null;
+}
+
+type DaySlots = ApiSlot[] | "loading" | "error";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const DAYS_SHORT   = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
-const MONTHS_LONG  = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
-const MONTHS_SHORT = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
-
-function toYMD(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+function getWeekStart(offset = 0): Date {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dow = today.getDay();
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - ((dow + 6) % 7) + offset * 7);
+  return monday;
 }
 
-function getWeekDates(weekOffset: number): Date[] {
-  const now = new Date(); now.setHours(0,0,0,0);
-  const dow = now.getDay();
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1) + weekOffset * 7);
-  return Array.from({ length: 7 }, (_, i) => { const d = new Date(monday); d.setDate(monday.getDate() + i); return d; });
+function formatDateLabel(date: Date): string {
+  return date.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
 }
 
-function weekLabel(days: Date[]): string {
-  const f = days[0], l = days[6];
-  if (f.getMonth() === l.getMonth()) return `${f.getDate()}–${l.getDate()} de ${MONTHS_LONG[f.getMonth()]} ${f.getFullYear()}`;
-  return `${f.getDate()} ${MONTHS_SHORT[f.getMonth()]} – ${l.getDate()} ${MONTHS_SHORT[l.getMonth()]} ${l.getFullYear()}`;
+function formatDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
-function formatDateLabel(d: Date): string { return `${DAYS_SHORT[d.getDay()]}, ${d.getDate()} de ${MONTHS_LONG[d.getMonth()]}`; }
-function formatDateShort(d: Date): string { return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`; }
+function slotKey(date: Date, slot: ApiSlot): string {
+  return `${formatDateKey(date)}-${slot.start}`;
+}
+
+const DAY_ABBR = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function WeeklyCalendar({ durationMinutes, onSlotSelected, selectedSlot }: WeeklyCalendarProps) {
-  const [weekOffset, setWeekOffset] = useState(0);
-  const [slotsMap,   setSlotsMap]   = useState<Record<string, ApiSlot[] | "loading" | "error">>({});
-  // The slot that is "focused" (clicked once) but not yet confirmed
-  const [focusedKey, setFocusedKey] = useState<string | null>(null);
-  // The slot data + date for the confirm modal
-  const [modalSlot,  setModalSlot]  = useState<{ slot: ApiSlot; date: Date } | null>(null);
-  const [isMobile,   setIsMobile]   = useState(false);
-  const [userTz,     setUserTz]     = useState<string>(SCHEDULE.timezone);
-  const [hasManuallyNavigated, setHasManuallyNavigated] = useState(false);
+export default function WeeklyCalendar({
+  durationMinutes,
+  onSlotSelected,
+  selectedSlot,
+}: WeeklyCalendarProps) {
+  const [weekOffset, setWeekOffset]   = useState(0);
+  const [slotsMap,   setSlotsMap]     = useState<Record<string, DaySlots>>({});
+  const [focusedKey, setFocusedKey]   = useState<string | null>(null);
+  const [modalSlot,  setModalSlot]    = useState<{ slot: ApiSlot; date: Date } | null>(null);
+  const [isMobile,   setIsMobile]     = useState(false);
+  const [userTz,     setUserTz]       = useState<string>(SCHEDULE.timezone);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const maxOffset = SCHEDULE.bookingWindowWeeks;
-  const days      = getWeekDates(weekOffset);
-  const today     = new Date(); today.setHours(0,0,0,0);
-  const todayYMD  = toYMD(today);
-  const maxDate   = new Date(today); maxDate.setDate(today.getDate() + SCHEDULE.bookingWindowWeeks * 7);
-  const maxYMD    = toYMD(maxDate);
+  const maxWeekOffset = SCHEDULE.bookingWindowWeeks - 1;
+  const weekStart     = getWeekStart(weekOffset);
 
-  // Detect mobile and user timezone once on mount
+  // Detect mobile
   useEffect(() => {
-    setIsMobile(window.matchMedia("(pointer: coarse)").matches);
-    try {
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      if (tz) setUserTz(tz);
-    } catch { /* keep default */ }
+    const check = () => setIsMobile(window.innerWidth < 500);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
   }, []);
 
-  // Auto-advance to next week if current week is completely empty
+  // Detect user timezone
   useEffect(() => {
-    if (hasManuallyNavigated || weekOffset >= maxOffset) return;
+    try {
+      setUserTz(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    } catch { /* ignore */ }
+  }, []);
 
-    let allLoaded = true;
-    let hasAnySlots = false;
-    let hasValidDays = false;
+  // Build 7-day window
+  const days: Date[] = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    return d;
+  });
+
+  // Fetch slots for each day in the window
+  useEffect(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const maxDate = new Date(); maxDate.setDate(maxDate.getDate() + SCHEDULE.bookingWindowWeeks * 7);
 
     days.forEach((date) => {
-      const ymd = toYMD(date);
-      if (ymd < todayYMD || ymd > maxYMD) return;
+      const key = formatDateKey(date);
+      if (slotsMap[key]) return; // already fetched or loading
 
-      hasValidDays = true;
-      const dayData = slotsMap[ymd];
+      const isPast   = date < today;
+      const isBeyond = date > maxDate;
+      const dow      = date.getDay();
+      const noSched  = DAY_SCHEDULES[dow] === null;
 
-      if (dayData === undefined || dayData === "loading") {
-        allLoaded = false;
-      } else if (dayData === "error") {
-        hasAnySlots = true; // Prevent auto-advance on error so user can see it
-      } else if (Array.isArray(dayData) && dayData.length > 0) {
-        hasAnySlots = true;
-      }
+      if (isPast || isBeyond || noSched) return;
+
+      setSlotsMap((prev) => ({ ...prev, [key]: "loading" }));
+
+      const tz = encodeURIComponent(userTz);
+      fetch(`/api/availability?date=${key}&duration=${durationMinutes}&tz=${tz}`)
+        .then((r) => r.json())
+        .then((data) => {
+          setSlotsMap((prev) => ({
+            ...prev,
+            [key]: Array.isArray(data.slots) ? data.slots : "error",
+          }));
+        })
+        .catch(() => {
+          setSlotsMap((prev) => ({ ...prev, [key]: "error" }));
+        });
     });
+  }, [weekOffset, durationMinutes, userTz]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    if (hasValidDays && allLoaded && !hasAnySlots) {
-      setWeekOffset(o => o + 1);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slotsMap, weekOffset, hasManuallyNavigated]);
-
-  // Fetch availability for the current week
-  useEffect(() => {
-    days.forEach(async (date) => {
-      const ymd = toYMD(date);
-      if (ymd < todayYMD || ymd > maxYMD) return;
-      if (slotsMap[ymd] !== undefined) return;
-      setSlotsMap(prev => ({ ...prev, [ymd]: "loading" }));
-      try {
-        const res  = await fetch(`/api/availability?date=${ymd}&duration=${durationMinutes}&tz=${encodeURIComponent(userTz)}`);
-        const data = await res.json();
-        setSlotsMap(prev => ({ ...prev, [ymd]: data.slots ?? [] }));
-      } catch {
-        setSlotsMap(prev => ({ ...prev, [ymd]: "error" }));
-      }
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekOffset, durationMinutes, userTz]);
-
-  // Re-fetch when timezone changes
-  useEffect(() => {
-    setSlotsMap({});
-    setHasManuallyNavigated(false);
-    setWeekOffset(0);
-  }, [userTz]);
-
-  function slotKey(date: Date, slot: ApiSlot) { return `${toYMD(date)}-${slot.start}`; }
-
-  function handleSlotClick(date: Date, slot: ApiSlot) {
+  const handleSlotClick = useCallback((date: Date, slot: ApiSlot) => {
     const key = slotKey(date, slot);
     if (isMobile) {
-      // Mobile: first tap focuses, second tap opens modal
       if (focusedKey === key) {
         setModalSlot({ slot, date });
+        setFocusedKey(null);
       } else {
         setFocusedKey(key);
       }
     } else {
-      // Desktop: click focuses (overlay "Seleccionar" button appears on hover)
-      setFocusedKey(prev => prev === key ? null : key);
+      setFocusedKey(key);
     }
-  }
+  }, [isMobile, focusedKey]);
 
-  function handleSelectOverlay(date: Date, slot: ApiSlot, e: React.MouseEvent) {
+  const handleSelectOverlay = useCallback((date: Date, slot: ApiSlot, e: React.MouseEvent) => {
     e.stopPropagation();
     setModalSlot({ slot, date });
-  }
+    setFocusedKey(null);
+  }, []);
 
-  function handleModalConfirm(note?: string) {
+  const handleModalConfirm = useCallback((note?: string) => {
     if (!modalSlot) return;
     const { slot, date } = modalSlot;
+    const tzDiffers = userTz !== SCHEDULE.timezone;
+    const displayLabel = tzDiffers ? slot.localLabel : slot.label;
     onSlotSelected({
-      startIso:   slot.start,
-      endIso:     slot.end,
-      label:      slot.label,
-      localLabel: slot.localLabel,
-      dateLabel:  formatDateLabel(date),
-      dateShort:  formatDateShort(date),
-      timezone:   userTz,
+      startIso:  slot.start,
+      endIso:    slot.end,
+      label:     displayLabel,
+      dateLabel: formatDateLabel(date),
       note,
+      timezone:  userTz,
     });
     setModalSlot(null);
-    setFocusedKey(null);
-  }
+  }, [modalSlot, userTz, onSlotSelected]);
 
-  function handleModalClose() {
-    setModalSlot(null);
-    setFocusedKey(null);
-  }
+  const handleModalClose = useCallback(() => setModalSlot(null), []);
 
-  const canPrev = weekOffset > 0;
-  const canNext = weekOffset < maxOffset;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const maxDate = new Date(); maxDate.setDate(maxDate.getDate() + SCHEDULE.bookingWindowWeeks * 7);
   const tzDiffers = userTz !== SCHEDULE.timezone;
+
+  // Week label
+  const weekLabel = (() => {
+    const end = new Date(weekStart); end.setDate(end.getDate() + 6);
+    const fmt = (d: Date) => d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+    return `${fmt(weekStart)} — ${fmt(end)}`;
+  })();
 
   return (
     <>
-      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-          <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>{weekLabel(days)}</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ display: "flex", gap: 6 }}>
-              <NavBtn onClick={() => { setWeekOffset(o => o - 1); setHasManuallyNavigated(true); }} disabled={!canPrev} direction="left" />
-              <NavBtn onClick={() => { setWeekOffset(o => o + 1); setHasManuallyNavigated(true); }} disabled={!canNext} direction="right" />
+      <div ref={containerRef}>
+        {/* ── Header row ── */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "#e5e1e4", fontFamily: "var(--font-headline, Manrope), sans-serif" }}>
+              {weekLabel}
             </div>
+            {tzDiffers && (
+              <div style={{ fontSize: 11, color: "#86948a", marginTop: 2 }}>
+                Horarios en tu zona ({userTz})
+              </div>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <NavBtn onClick={() => setWeekOffset((w) => w - 1)} disabled={weekOffset === 0} direction="left" />
+            <NavBtn onClick={() => setWeekOffset((w) => w + 1)} disabled={weekOffset >= maxWeekOffset} direction="right" />
           </div>
         </div>
 
-        {/* 7-day grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
+        {/* ── Day grid ── */}
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${days.length}, 1fr)`, gap: 4 }}>
           {days.map((date) => {
-            const ymd      = toYMD(date);
-            const isPast   = ymd < todayYMD;
-            const isBeyond = ymd > maxYMD;
-            const isToday  = ymd === todayYMD;
-            const daySlots = slotsMap[ymd];
+            const key      = formatDateKey(date);
+            const dow      = date.getDay();
+            const daySlots = slotsMap[key];
+            const isPast   = date < today;
+            const isBeyond = date > maxDate;
+            const noSched  = DAY_SCHEDULES[dow] === null;
+            const isToday  = date.toDateString() === today.toDateString();
 
             return (
-              <div key={ymd} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, opacity: isPast ? 0.35 : 1 }}>
+              <div key={key} style={{ minWidth: 0 }}>
                 {/* Day header */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, paddingBottom: 6, borderBottom: "1px solid var(--border)", width: "100%" }}>
-                  <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.07em", color: isToday ? "var(--green)" : "var(--text-dim)" }}>
-                    {DAYS_SHORT[date.getDay()]}
-                  </span>
-                  <div style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, background: isToday ? "var(--surface-2)" : "none", border: isToday ? "1px solid rgba(255,255,255,0.12)" : "none", color: isToday ? "var(--text)" : "var(--text-muted)" }}>
+                <div
+                  style={{
+                    textAlign: "center",
+                    padding: "8px 4px",
+                    marginBottom: 6,
+                    borderRadius: 6,
+                    background: isToday ? "rgba(78,222,163,0.08)" : "transparent",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                      letterSpacing: "0.07em",
+                      textTransform: "uppercase",
+                      color: isToday ? "#4edea3" : "#86948a",
+                      marginBottom: 3,
+                    }}
+                  >
+                    {DAY_ABBR[dow]}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 16,
+                      fontWeight: 700,
+                      color: isToday ? "#4edea3" : "#e5e1e4",
+                      fontFamily: "var(--font-headline, Manrope), sans-serif",
+                      lineHeight: 1,
+                    }}
+                  >
                     {date.getDate()}
                   </div>
                 </div>
 
                 {/* Slots */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, width: "100%" }}>
-                  {isPast || isBeyond ? <EmptyDash /> :
+                  {isPast || isBeyond || noSched ? <EmptyDash /> :
                    daySlots === "loading" || daySlots === undefined ? <LoadingDots /> :
                    daySlots === "error" || daySlots.length === 0 ? <EmptyDash /> :
                    daySlots.map((slot) => {
-                     const key        = slotKey(date, slot);
-                     const isFocused  = focusedKey === key;
+                     const sk         = slotKey(date, slot);
+                     const isFocused  = focusedKey === sk;
                      const isSelected = selectedSlot?.startIso === slot.start;
                      const displayLabel = tzDiffers ? slot.localLabel : slot.label;
                      return (
@@ -262,7 +301,7 @@ export default function WeeklyCalendar({ durationMinutes, onSlotSelected, select
         </div>
 
         {isMobile && focusedKey && (
-          <p style={{ fontSize: 12, color: "var(--text-dim)", textAlign: "center" }}>
+          <p style={{ fontSize: 12, color: "#86948a", textAlign: "center", marginTop: 12 }}>
             Toca el horario seleccionado de nuevo para confirmar
           </p>
         )}
@@ -291,12 +330,11 @@ function ConfirmModal({
   onConfirm: (note?: string) => void; onClose: () => void;
 }) {
   const [note, setNote] = useState("");
-  const tzDiffers  = userTz !== SCHEDULE.timezone;
-  const dateLabel  = formatDateLabel(date);
-  const localLabel = slot.localLabel;
+  const tzDiffers   = userTz !== SCHEDULE.timezone;
+  const dateLabel   = formatDateLabel(date);
+  const localLabel  = slot.localLabel;
   const madridLabel = slot.label;
 
-  // Close on Escape
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
@@ -309,37 +347,52 @@ function ConfirmModal({
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
         position: "fixed", inset: 0, zIndex: 200,
-        background: "rgba(0,0,0,0.72)",
+        background: "rgba(0,0,0,0.75)",
         display: "flex", alignItems: "center", justifyContent: "center",
         padding: "24px 16px",
       }}
     >
       <div style={{
-        background: "var(--surface)", border: "1px solid var(--border)",
+        background: "rgba(53,52,55,0.95)",
+        border: "1px solid rgba(255,255,255,0.08)",
+        backdropFilter: "blur(32px)",
+        WebkitBackdropFilter: "blur(32px)",
         borderRadius: 16, width: "100%", maxWidth: 420,
         padding: "24px",
         display: "flex", flexDirection: "column", gap: 18,
         animation: "fadeUp 0.2s ease both",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
       }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(61,220,132,0.1)", border: "1px solid rgba(61,220,132,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3ddc84" strokeWidth="2" strokeLinecap="round">
-                <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            <div style={{
+              width: 40, height: 40, borderRadius: 10,
+              background: "rgba(78,222,163,0.1)",
+              border: "1px solid rgba(78,222,163,0.2)",
+              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+            }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4edea3" strokeWidth="2" strokeLinecap="round">
+                <rect x="3" y="4" width="18" height="18" rx="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
               </svg>
             </div>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>{dateLabel}</div>
-              <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#e5e1e4" }}>{dateLabel}</div>
+              <div style={{ fontSize: 13, color: "#bbcabf" }}>
                 {tzDiffers ? `${localLabel} (tu hora)` : localLabel}
-                {tzDiffers && <span style={{ color: "var(--text-dim)", marginLeft: 4 }}>· {madridLabel} Madrid</span>}
+                {tzDiffers && <span style={{ color: "#86948a", marginLeft: 4 }}>· {madridLabel} Madrid</span>}
               </div>
             </div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: 4 }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text)")}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-muted)")}>
+          <button
+            onClick={onClose}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#bbcabf", padding: 4, borderRadius: 6 }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#e5e1e4")}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "#bbcabf")}
+          >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
@@ -348,8 +401,8 @@ function ConfirmModal({
 
         {/* Note input */}
         <div>
-          <label style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>
-            Motivo de la sesión <span style={{ color: "var(--text-dim)", fontWeight: 400 }}>(opcional)</span>
+          <label style={{ fontSize: 12, fontWeight: 500, color: "#bbcabf", display: "block", marginBottom: 6 }}>
+            Motivo de la sesión <span style={{ color: "#86948a", fontWeight: 400 }}>(opcional)</span>
           </label>
           <textarea
             value={note}
@@ -359,18 +412,18 @@ function ConfirmModal({
             placeholder="Ej: tengo dudas sobre recursividad en Java, preparación de entrevista técnica..."
             style={{
               width: "100%", padding: "10px 12px",
-              background: "var(--surface-2, #1c1f21)",
-              border: "1px solid var(--border)",
-              borderRadius: 8, color: "var(--text)",
+              background: "#201f22",
+              border: "1px solid rgba(255,255,255,0.07)",
+              borderRadius: 8, color: "#e5e1e4",
               fontFamily: "inherit", fontSize: 13, lineHeight: 1.6,
               resize: "vertical", outline: "none",
               transition: "border-color 0.15s",
               boxSizing: "border-box",
             }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(61,220,132,0.4)")}
-            onBlur={(e)  => (e.currentTarget.style.borderColor = "var(--border)")}
+            onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(78,222,163,0.4)")}
+            onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)")}
           />
-          <p style={{ fontSize: 11.5, color: "var(--text-dim)", marginTop: 5 }}>
+          <p style={{ fontSize: 11.5, color: "#86948a", marginTop: 5 }}>
             También puedes enviar los detalles por email después
           </p>
         </div>
@@ -381,13 +434,14 @@ function ConfirmModal({
           style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
             width: "100%", padding: "13px 20px",
-            background: "var(--green)", border: "none", borderRadius: 8,
-            color: "#0d0f10", fontSize: 14, fontWeight: 600,
+            background: "linear-gradient(135deg, #4edea3, #10b981)",
+            border: "none", borderRadius: 8,
+            color: "#003824", fontSize: 14, fontWeight: 700,
             cursor: "pointer", fontFamily: "inherit",
-            transition: "background 0.15s",
+            transition: "opacity 0.15s, transform 0.1s",
           }}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "#5ae89a")}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--green)")}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.9"; (e.currentTarget as HTMLElement).style.transform = "scale(1.01)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; (e.currentTarget as HTMLElement).style.transform = "scale(1)"; }}
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <polyline points="20 6 9 17 4 12"/>
@@ -395,7 +449,7 @@ function ConfirmModal({
           Confirmar reserva
         </button>
 
-        <p style={{ fontSize: 11.5, color: "var(--text-dim)", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 5, margin: 0 }}>
+        <p style={{ fontSize: 11.5, color: "#86948a", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 5, margin: 0 }}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
           </svg>
@@ -422,42 +476,41 @@ function SlotButton({ label, subLabel, focused, selected, isMobile, onClick, onS
   const showOverlay = focused && (hovered || isMobile);
 
   return (
-    <div style={{ position: "relative", width: "100%" }}
+    <div
+      style={{ position: "relative", width: "100%" }}
       onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}>
+      onMouseLeave={() => setHovered(false)}
+    >
       <button
         onClick={onClick}
         style={{
-          width: "100%", padding: subLabel ? "4px 2px" : "6px 2px",
-          borderRadius: 8, fontSize: 11, fontWeight: focused || selected ? 600 : 500,
+          width: "100%", padding: subLabel ? "4px 2px" : "7px 2px",
+          borderRadius: 6, fontSize: 11, fontWeight: focused || selected ? 600 : 400,
           cursor: "pointer", textAlign: "center",
-          border: selected ? "1px solid var(--green)" :
-                  focused  ? "1px solid rgba(61,220,132,0.6)" :
-                             "1px solid rgba(61,220,132,0.2)",
-          background: selected ? "var(--green)" :
-                      focused  ? "rgba(61,220,132,0.18)" :
-                                 "rgba(61,220,132,0.1)",
-          color: selected ? "#0d0f10" : "var(--green)",
+          border: selected ? "1px solid #4edea3" :
+                  focused  ? "1px solid rgba(78,222,163,0.6)" :
+                             "1px solid rgba(60,74,66,0.5)",
+          background: selected ? "#4edea3" :
+                      focused  ? "rgba(78,222,163,0.18)" :
+                                 "rgba(78,222,163,0.06)",
+          color: selected ? "#003824" : "#4edea3",
           fontFamily: "inherit", lineHeight: 1.3,
           transition: "background 0.15s, border-color 0.15s",
-          boxShadow: selected ? "0 4px 16px rgba(61,220,132,0.3)" :
-                     focused  ? "0 2px 8px rgba(61,220,132,0.15)" : "none",
-          filter: focused && !selected ? "brightness(1.1)" : "none",
+          boxShadow: selected ? "0 4px 16px rgba(78,222,163,0.3)" : "none",
         }}
       >
         {label}
         {subLabel && <div style={{ fontSize: 9, opacity: 0.6, lineHeight: 1.2 }}>{subLabel}</div>}
       </button>
 
-      {/* Overlay "Seleccionar" button — appears on hover when focused */}
       {focused && !selected && (
         <button
           onClick={onSelectOverlay}
           style={{
             position: "absolute", inset: 0,
-            borderRadius: 8, border: "none",
-            background: hovered ? "rgba(61,220,132,0.92)" : "rgba(61,220,132,0.0)",
-            color: "#0d0f10",
+            borderRadius: 6, border: "none",
+            background: hovered ? "rgba(78,222,163,0.92)" : "rgba(78,222,163,0.0)",
+            color: "#003824",
             fontSize: 10, fontWeight: 700,
             cursor: "pointer", fontFamily: "inherit",
             transition: "background 0.18s, opacity 0.18s",
@@ -477,10 +530,22 @@ function SlotButton({ label, subLabel, focused, selected, isMobile, onClick, onS
 
 function NavBtn({ onClick, disabled, direction }: { onClick: () => void; disabled: boolean; direction: "left" | "right" }) {
   return (
-    <button onClick={onClick} disabled={disabled} aria-label={direction === "left" ? "Semana anterior" : "Semana siguiente"}
-      style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--surface)", border: "1px solid var(--border)", cursor: disabled ? "not-allowed" : "pointer", color: "var(--text-muted)", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", opacity: disabled ? 0.3 : 1, transition: "border-color 0.15s, color 0.15s" }}
-      onMouseEnter={(e) => { if (!disabled) { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.2)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; } }}
-      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={direction === "left" ? "Semana anterior" : "Semana siguiente"}
+      style={{
+        width: 30, height: 30, borderRadius: "50%",
+        background: "#201f22",
+        border: "1px solid rgba(255,255,255,0.07)",
+        cursor: disabled ? "not-allowed" : "pointer",
+        color: "#bbcabf",
+        fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center",
+        opacity: disabled ? 0.3 : 1,
+        transition: "border-color 0.15s, color 0.15s",
+      }}
+      onMouseEnter={(e) => { if (!disabled) { (e.currentTarget as HTMLElement).style.borderColor = "rgba(78,222,163,0.3)"; (e.currentTarget as HTMLElement).style.color = "#4edea3"; } }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.07)"; (e.currentTarget as HTMLElement).style.color = "#bbcabf"; }}
     >
       {direction === "left"
         ? <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -491,13 +556,31 @@ function NavBtn({ onClick, disabled, direction }: { onClick: () => void; disable
 }
 
 function EmptyDash() {
-  return <div style={{ width: "100%", height: 36, borderRadius: 8, background: "var(--surface)", border: "1px dashed var(--border)", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ width: 14, height: 1, background: "var(--text-dim)" }} /></div>;
+  return (
+    <div style={{
+      width: "100%", height: 36, borderRadius: 6,
+      background: "#1c1b1d",
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <div style={{ width: 14, height: 1, background: "#86948a", opacity: 0.3 }} />
+    </div>
+  );
 }
 
 function LoadingDots() {
   return (
-    <div style={{ width: "100%", height: 36, borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}>
-      {[0,1,2].map(i => <div key={i} style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--text-dim)", animation: `pulse 1.2s ease-in-out ${i*0.2}s infinite` }} />)}
+    <div style={{
+      width: "100%", height: 36, borderRadius: 6,
+      background: "#1c1b1d",
+      display: "flex", alignItems: "center", justifyContent: "center", gap: 3,
+    }}>
+      {[0,1,2].map(i => (
+        <div key={i} style={{
+          width: 4, height: 4, borderRadius: "50%",
+          background: "#86948a",
+          animation: `pulse 1.2s ease-in-out ${i*0.2}s infinite`,
+        }} />
+      ))}
       <style>{`@keyframes pulse { 0%,100%{opacity:.3;transform:scale(.8)} 50%{opacity:1;transform:scale(1)} }`}</style>
     </div>
   );

@@ -1,64 +1,67 @@
-import type { PackSize } from "@/types";
-
-// ─── Packs ────────────────────────────────────────────────────────────────────
-
-export const PACK_CONFIG: Record<
-  PackSize,
-  {
-    size: PackSize;
-    price: string;
-    priceValue: number;
-    perClass: string;
-    savings: string;
-    badge: string;
-    featured?: boolean;
-  }
-> = {
-  5: {
-    size: 5,
-    price: "€75",
-    priceValue: 75,
-    perClass: "€15/clase",
-    savings: "Ahorras €5 vs sesiones sueltas",
-    badge: "⚡ Popular",
-    featured: true,
-  },
-  10: {
-    size: 10,
-    price: "€140",
-    priceValue: 140,
-    perClass: "€14/clase",
-    savings: "Ahorras €20 vs sesiones sueltas",
-    badge: "Máximo ahorro",
-    featured: false,
-  },
-};
-
-export const PACK_SIZES = [5, 10] as const satisfies readonly PackSize[];
-
-export const PACK_VALIDITY_MONTHS = 6;
-
-// ─── Design tokens (kept in sync with globals.css) ───────────────────────────
+/**
+ * constants/index.ts — Emerald Nocturne design tokens
+ *
+ * Mapping: old COLORS object → new Emerald Nocturne palette.
+ * All existing component imports (BookingModeView, PackModal, etc.) continue to
+ * work without modification.
+ *
+ * Pack config and other non-colour constants are unchanged.
+ */
 
 export const COLORS = {
-  brand: "#3ddc84",
-  brandHover: "#34c274",
-  brandMuted: "rgba(61,220,132,0.12)",
-  brandBorder: "rgba(61,220,132,0.2)",
-  surface: "#141618",
-  background: "#0d0f10",
-  border: "rgba(255,255,255,0.07)",
-  textPrimary: "#e8e9ea",
-  textSecondary: "#7a7f84",
-  textMuted: "#4a4f54",
-  textBody: "#c9d1de",
-  error: "#f87171",
-  errorBg: "rgba(248,113,113,0.08)",
-  errorBorder: "rgba(248,113,113,0.27)",
-  warning: "#fbbf24",
-  warningBg: "rgba(251,191,36,0.08)",
-  warningBorder: "rgba(251,191,36,0.2)",
-  successBg: "rgba(13,31,20,0.9)",
-  successBorder: "rgba(61,220,132,0.27)",
+  /* Backgrounds */
+  background:    "#131315",
+  surface:       "#1c1b1d",
+  surface2:      "#201f22",
+
+  /* Brand / Primary */
+  brand:         "#4edea3",
+  brandHover:    "#3bcf94",
+  brandMuted:    "rgba(78, 222, 163, 0.12)",
+  brandBorder:   "rgba(78, 222, 163, 0.25)",
+
+  /* Text */
+  textPrimary:   "#e5e1e4",
+  textSecondary: "#bbcabf",
+  textMuted:     "#86948a",
+
+  /* Borders */
+  border:        "rgba(255, 255, 255, 0.05)",
+  borderVariant: "#3c4a42",
+
+  /* Status */
+  error:         "#ffb4ab",
+  errorBg:       "rgba(255, 180, 171, 0.12)",
+  warning:       "#fbbf24",
+  warningBg:     "rgba(251, 191, 36, 0.12)",
+  warningBorder: "rgba(251, 191, 36, 0.25)",
+  errorBorder:   "rgba(255, 180, 171, 0.25)",
+
+  /* Success (shared with brand in dark-emerald UI) */
+  successBg:     "rgba(78, 222, 163, 0.1)",
+  successBorder: "rgba(78, 222, 163, 0.25)",
 } as const;
 
+/** Available pack sizes (hours) */
+export const PACK_SIZES = [5, 10] as const;
+
+export const PACK_CONFIG = {
+  5: {
+    hours:       5,
+    price:       "$200",
+    priceNumber: 200,
+    discount:    "Ahorra $25",
+    label:       "Pack 5 Horas",
+  },
+  10: {
+    hours:       10,
+    price:       "$360",
+    priceNumber: 360,
+    discount:    "Máximo valor — ahorra $40",
+    label:       "Pack 10 Horas",
+    recommended: true,
+  },
+} as const;
+
+/** Pack validity period in months */
+export const PACK_VALIDITY_MONTHS = 6;

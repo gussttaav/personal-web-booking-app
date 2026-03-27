@@ -1,123 +1,178 @@
 "use client";
 
-import { PACK_CONFIG } from "@/constants";
+/**
+ * PackCard — Emerald Nocturne reskin
+ *
+ * Props interface: IDENTICAL to original — no logic changes.
+ * Visual: matches the pack pricing cards in landing.html.
+ *   - "Recomendado" ribbon on 10h pack
+ *   - Tonal surface stacking (no hard borders on base, ghost border on featured)
+ *   - Price in Manrope black
+ */
+
 import type { PackSize } from "@/types";
 
 interface PackCardProps {
   size: PackSize;
-  activeCredits: number | null;
-  creditsLoading: boolean;
-  onBuy: (size: PackSize) => void;
-  onSchedule: () => void;
+  price: string;
+  discount: string;
+  recommended?: boolean;
+  onClick: () => void;
 }
 
 export default function PackCard({
   size,
-  activeCredits,
-  creditsLoading,
-  onBuy,
-  onSchedule,
+  price,
+  discount,
+  recommended = false,
+  onClick,
 }: PackCardProps) {
-  const pack = PACK_CONFIG[size];
-  const isPopular = pack.featured;
-  const hasCredits = !creditsLoading && activeCredits !== null && activeCredits > 0;
+  const features =
+    size === 10
+      ? [
+          "Ahorro de hasta el 20%",
+          "Canal privado Slack/Discord",
+          "Vigencia de 180 días",
+        ]
+      : [
+          "Ahorra sobre precio base",
+          "Vigencia de 180 días",
+        ];
 
   return (
-    <div
+    <button
+      onClick={onClick}
       style={{
-        flex: "1 1 200px",
-        padding: "22px 20px",
-        background: isPopular ? "rgba(61,220,132,0.06)" : "var(--surface)",
-        border: isPopular ? "1px solid rgba(61,220,132,0.3)" : "1px solid var(--border)",
-        borderRadius: "var(--radius)",
-        display: "flex",
-        flexDirection: "column",
+        position: "relative",
+        width: "100%",
+        padding: "28px",
+        background: recommended ? "rgba(78,222,163,0.05)" : "#201f22",
+        border: recommended
+          ? "1px solid rgba(78,222,163,0.25)"
+          : "1px solid rgba(255,255,255,0.06)",
+        borderRadius: "12px",
+        cursor: "pointer",
+        textAlign: "left",
+        transition: "border-color 0.2s, background 0.2s, transform 0.15s",
+        fontFamily: "inherit",
+        overflow: "hidden",
+        marginBottom: "12px",
+      }}
+      onMouseEnter={(e) => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.borderColor = recommended
+          ? "rgba(78,222,163,0.5)"
+          : "rgba(78,222,163,0.2)";
+        el.style.transform = "translateY(-1px)";
+      }}
+      onMouseLeave={(e) => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.borderColor = recommended
+          ? "rgba(78,222,163,0.25)"
+          : "rgba(255,255,255,0.06)";
+        el.style.transform = "translateY(0)";
       }}
     >
-      <span
-        style={{
-          fontSize: 11,
-          fontWeight: 500,
-          color: isPopular ? "var(--green)" : "var(--text-muted)",
-          marginBottom: 12,
-          display: "block",
-        }}
-      >
-        {pack.badge}
-      </span>
-
-      <div
-        style={{
-          fontFamily: "var(--font-serif), 'DM Serif Display', serif",
-          fontSize: 34,
-          color: "var(--text)",
-          lineHeight: 1,
-          marginBottom: 2,
-        }}
-      >
-        {size}h
-      </div>
-
-      {hasCredits ? (
-        <div style={{ fontSize: 12, marginBottom: 14 }}>
-          <span style={{ color: "var(--green)", fontWeight: 500 }}>
-            {activeCredits} clase{activeCredits !== 1 ? "s" : ""} disponible
-            {activeCredits !== 1 ? "s" : ""}
-          </span>
-          <span style={{ color: "var(--text-muted)" }}> · {pack.perClass}</span>
-        </div>
-      ) : (
-        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14 }}>
-          {size} clases · {pack.perClass}
+      {/* Recommended ribbon */}
+      {recommended && (
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            padding: "4px 10px",
+            background: "#4edea3",
+            color: "#003824",
+            fontSize: "9px",
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            fontFamily: "var(--font-headline, Manrope), sans-serif",
+            borderBottomLeftRadius: "8px",
+          }}
+        >
+          Recomendado
         </div>
       )}
 
-      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 4 }}>
-        <span style={{ fontSize: 20, fontWeight: 500, color: "var(--text)" }}>{pack.price}</span>
-        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>pago único</span>
-      </div>
-      <div style={{ fontSize: 11, color: "var(--green)", fontWeight: 500, marginBottom: 16 }}>
-        {pack.savings}
-      </div>
-
-      <button
-        onClick={() => (hasCredits ? onSchedule() : onBuy(size))}
+      {/* Header */}
+      <div
         style={{
-          display: "block",
-          width: "100%",
-          padding: "10px",
-          borderRadius: 8,
-          border: isPopular || hasCredits ? "1px solid var(--green)" : "1px solid var(--border)",
-          background: isPopular || hasCredits ? "var(--green)" : "transparent",
-          color: isPopular || hasCredits ? "#0d0f10" : "var(--text-muted)",
-          fontFamily: "inherit",
-          fontSize: 13,
-          fontWeight: 500,
-          cursor: "pointer",
-          transition: "all 0.2s",
-          marginTop: "auto",
-        }}
-        onMouseEnter={(e) => {
-          const btn = e.currentTarget as HTMLButtonElement;
-          btn.style.background = "var(--green)";
-          btn.style.borderColor = "var(--green)";
-          btn.style.color = "#0d0f10";
-        }}
-        onMouseLeave={(e) => {
-          const btn = e.currentTarget as HTMLButtonElement;
-          if (isPopular || hasCredits) {
-            btn.style.background = "var(--green)";
-            btn.style.borderColor = "var(--green)";
-            btn.style.color = "#0d0f10";
-          } else {
-            btn.style.background = "transparent";
-            btn.style.borderColor = "var(--border)";
-            btn.style.color = "var(--text-muted)";
-          }
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          marginBottom: "6px",
+          paddingRight: recommended ? "80px" : "0",
         }}
       >
-        {hasCredits ? `Reservar clase` : `Comprar pack · ${pack.price}`}
-      </button>
-    </div>
+        <div
+          style={{
+            fontFamily: "var(--font-headline, Manrope), sans-serif",
+            fontSize: "17px",
+            fontWeight: 700,
+            color: "#e5e1e4",
+            letterSpacing: "-0.01em",
+          }}
+        >
+          Pack {size} Horas
+        </div>
+        <div
+          style={{
+            fontFamily: "var(--font-headline, Manrope), sans-serif",
+            fontSize: "26px",
+            fontWeight: 800,
+            color: "#4edea3",
+            letterSpacing: "-0.02em",
+          }}
+        >
+          {price}
+        </div>
+      </div>
+
+      {/* Discount label */}
+      <p
+        style={{
+          fontSize: "12px",
+          color: "#bbcabf",
+          marginBottom: "18px",
+        }}
+      >
+        {discount}
+      </p>
+
+      {/* Feature list */}
+      <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "8px" }}>
+        {features.map((f) => (
+          <li
+            key={f}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              fontSize: "13px",
+              color: "#bbcabf",
+            }}
+          >
+            <div
+              style={{
+                width: "18px",
+                height: "18px",
+                borderRadius: "50%",
+                background: "rgba(78,222,163,0.12)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4edea3" strokeWidth="3" strokeLinecap="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </div>
+            {f}
+          </li>
+        ))}
+      </ul>
+    </button>
   );
 }

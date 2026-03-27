@@ -1,9 +1,27 @@
 import { Suspense } from "react";
 import { Spinner } from "@/components/ui";
-import { COLORS } from "@/constants";
 import HeroSection from "@/features/landing/HeroSection";
+import BiographySection from "@/features/landing/BiographySection";
 import TrustBar from "@/features/landing/TrustBar";
 import InteractiveShell from "@/features/booking/InteractiveShell";
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
+
+/**
+ * page.tsx — Emerald Nocturne redesign
+ *
+ * Layout (top → bottom):
+ *   Navbar          (fixed, sticky — client component, auth-aware)
+ *   HeroSection     (RSC — static, no JS)
+ *   BiographySection (RSC — new, Case B)
+ *   ──── divider ────
+ *   InteractiveShell (client boundary — all booking/auth state)
+ *   TrustBar         (RSC — static)
+ *   Footer           (RSC — includes FooterModals client island)
+ *
+ * The full-width Navbar and Footer live outside the centered content column.
+ * The column max-width matches the original (680px) for the booking shell.
+ */
 
 export default function HomePage() {
   return (
@@ -11,13 +29,17 @@ export default function HomePage() {
       fallback={
         <div
           className="min-h-screen flex items-center justify-center"
-          style={{ background: COLORS.background, position: "relative", zIndex: 1 }}
+          style={{ background: "#131315", position: "relative", zIndex: 1 }}
         >
           <Spinner />
         </div>
       }
     >
+      {/* Fixed nav — full width, sits above everything */}
+      <Navbar />
+
       <main style={{ position: "relative", zIndex: 1 }}>
+        {/* ── Centered content column ── */}
         <div
           style={{
             maxWidth: 680,
@@ -27,26 +49,29 @@ export default function HomePage() {
             zIndex: 1,
           }}
         >
-          {/* ── Static RSC sections (no JS shipped) ── */}
+          {/* Static RSC sections */}
           <HeroSection />
+
+          {/* Biography — Case B: integrated with new styling */}
+          <BiographySection />
 
           {/* Divider */}
           <div
             style={{
               height: 1,
-              background: "linear-gradient(90deg, transparent, var(--border), transparent)",
-              margin: "8px 0 32px",
+              background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent)",
+              margin: "8px 0 36px",
             }}
           />
 
-          {/* ── Client island: all interactive booking/auth state ── */}
+          {/* Client island — all interactive booking/auth state */}
           <InteractiveShell />
 
-          {/* ── Static RSC trust bar ── */}
+          {/* Static trust bar */}
           <TrustBar />
         </div>
 
-        {/* CSS animations (scoped to landing) */}
+        {/* CSS animations scoped to landing */}
         <style>{`
           @keyframes fadeUp {
             from { opacity: 0; transform: translateY(20px); }
@@ -56,37 +81,11 @@ export default function HomePage() {
             from { opacity: 0; }
             to   { opacity: 1; }
           }
-          .badge-link {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 12px;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 100px;
-            font-size: 12.5px;
-            font-weight: 400;
-            color: var(--text-muted);
-            text-decoration: none;
-            transition: border-color 0.2s, color 0.2s;
-            white-space: nowrap;
-          }
-          .badge-link:hover {
-            border-color: rgba(255,255,255,0.2);
-            color: var(--text);
-          }
-          .badge-link--green {
-            background: var(--green-dim);
-            border-color: rgba(61,220,132,0.2);
-            color: var(--green);
-            font-weight: 500;
-          }
-          .badge-link--green:hover {
-            background: var(--green-mid);
-            border-color: rgba(61,220,132,0.4);
-          }
         `}</style>
       </main>
+
+      {/* Full-width footer */}
+      <Footer />
     </Suspense>
   );
 }

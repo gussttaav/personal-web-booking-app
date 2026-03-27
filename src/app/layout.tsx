@@ -1,22 +1,35 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Sans, DM_Serif_Display } from "next/font/google";
+import { Manrope, Inter } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import AuthProvider from "@/components/AuthProvider";
 import "./globals.css";
 
-const dmSans = DM_Sans({
+/**
+ * layout.tsx — Emerald Nocturne redesign
+ *
+ * Font update:
+ *   - Headlines: Manrope (was DM Serif Display / DM Sans)
+ *   - Body/UI:   Inter (was DM Sans)
+ *
+ * CSS variables exposed:
+ *   --font-headline  → Manrope
+ *   --font-body      → Inter
+ *
+ * All existing logic (AuthProvider, Analytics, metadata) is unchanged.
+ */
+
+const manrope = Manrope({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-sans",
-  weight: ["300", "400", "500"],
+  variable: "--font-headline",
+  weight: ["600", "700", "800"],
 });
 
-const dmSerifDisplay = DM_Serif_Display({
+const inter = Inter({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-serif",
-  weight: "400",
-  style: ["normal", "italic"],
+  variable: "--font-body",
+  weight: ["300", "400", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -37,7 +50,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0d0f10",
+  themeColor: "#131315",
 };
 
 export default function RootLayout({
@@ -46,11 +59,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="es" className={`${dmSans.variable} ${dmSerifDisplay.variable}`}>
+    <html lang="es" className={`dark ${manrope.variable} ${inter.variable}`}>
       <head>
         <link rel="manifest" href="/site.webmanifest" />
+        {/* Material Symbols for icon usage in new design */}
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+        />
       </head>
-      <body className={dmSans.className}>
+      <body className={inter.className}>
         <AuthProvider>{children}</AuthProvider>
         <Analytics />
       </body>
