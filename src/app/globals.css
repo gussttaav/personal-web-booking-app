@@ -546,3 +546,102 @@ body::after {
   text-decoration: none;
 }
 .policy-body a:hover { text-decoration: underline; }
+
+/* ─── Landing page responsive layout ─────────────────────────────────────── */
+
+/* Page column padding */
+.landing-column { padding: 0 16px 80px; }
+@media (min-width: 640px)  { .landing-column { padding: 0 24px 80px; } }
+@media (min-width: 768px)  { .landing-column { padding: 0 32px 80px; } }
+
+/* Hero — CTA row */
+.hero-cta-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.hero-cta-row > a { text-align: center; justify-content: center; }
+@media (min-width: 640px) {
+  .hero-cta-row { flex-direction: row; align-items: center; }
+  .hero-cta-row > a { text-align: left; justify-content: flex-start; }
+}
+
+/* Specializations — section header */
+.specs-header {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+@media (min-width: 768px) {
+  .specs-header { flex-direction: row; align-items: flex-end; justify-content: space-between; }
+}
+
+/* Specializations — bento grid */
+.specs-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 768px) {
+  .specs-grid { grid-template-columns: repeat(12, 1fr); }
+}
+
+/* Specializations — DAM/DAW full-width card */
+.dam-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.dam-card-text { text-align: left; }
+@media (max-width: 767px) {
+  .dam-card { align-items: center; }
+  .dam-card-text { text-align: center; }
+}
+@media (min-width: 768px) {
+  .dam-card { flex-direction: row; align-items: center; }
+}
+
+/* Consulting — top row */
+.consulting-top {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+@media (min-width: 768px) {
+  .consulting-top { flex-direction: row; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; }
+}
+
+/* Consulting — features grid */
+.consulting-features {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+@media (min-width: 640px) {
+  .consulting-features { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Sessions grid (3-col on md+) */
+.sessions-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+@media (min-width: 768px) {
+  .sessions-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 767px) {
+  .sessions-grid button { transform: none !important; box-shadow: none !important; }
+}
+
+/* Packs 2-col layout (only on lg+) */
+.packs-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 32px;
+  align-items: start;
+}
+@media (min-width: 1024px) {
+  .packs-layout { grid-template-columns: 1fr 1fr; gap: 48px; }
+}

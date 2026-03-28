@@ -14,21 +14,12 @@
  * This is a Server Component — zero JS shipped.
  */
 
-const SKILLS = [
-  { icon: "💻", label: "Python / Java / C / Haskell" },
-  { icon: "🤖", label: "Machine Learning & IA" },
-  { icon: "📐", label: "Matemáticas & Álgebra" },
-  { icon: "🌐", label: "Backend & APIs REST" },
-  { icon: "🗄️", label: "Bases de datos SQL/NoSQL" },
-  { icon: "☁️", label: "Docker & Cloud (AWS / GCP)" },
-];
-
 export default function BiographySection() {
   return (
     <section
       style={{
-        margin: "0 -24px 48px",
-        padding: "48px 24px",
+        marginBottom: "48px",
+        padding: "48px 32px",
         background: "#1c1b1d",  /* surface-container-low — tonal lift, no border */
         borderRadius: "12px",
         animation: "fadeUp 0.7s ease both 0.15s",
@@ -82,16 +73,6 @@ export default function BiographySection() {
           intermediarios ni comisiones de plataforma. Más de 500 estudiantes han pasado
           por sus sesiones con una valoración media de 4.9/5.
         </p>
-      </div>
-
-      {/* ── Skills grid ── */}
-      <div className="skills-grid">
-        {SKILLS.map((s) => (
-          <div key={s.label} className="skill-item">
-            <span className="skill-icon">{s.icon}</span>
-            <span>{s.label}</span>
-          </div>
-        ))}
       </div>
 
       {/* ── Social links ── */}

@@ -238,51 +238,56 @@ export default function InteractiveShell() {
             marginBottom: "10px",
           }}
         >
-          Reserva una sesión
+          Sesiones individuales
         </p>
         <h2
           style={{
             fontFamily: "var(--font-headline, Manrope), sans-serif",
-            fontSize: "clamp(1.3rem, 3.5vw, 1.8rem)",
-            fontWeight: 700,
-            letterSpacing: "-0.01em",
+            fontSize: "clamp(1.4rem, 3.5vw, 2rem)",
+            fontWeight: 800,
+            letterSpacing: "-0.02em",
             color: "#e5e1e4",
-            marginBottom: "6px",
+            marginBottom: "8px",
           }}
         >
-          Elige el formato que mejor se adapta a ti
+          Elige tu modalidad de sesión
         </h2>
-        <p style={{ fontSize: "13.5px", color: "#86948a", marginBottom: "24px" }}>
-          Desde una sesión exploratoria gratuita hasta packs con descuento.
+        <p style={{ fontSize: "14px", color: "#86948a", marginBottom: "32px" }}>
+          Desde una exploración inicial gratuita hasta sesiones de trabajo intensivo.
         </p>
 
         {isAuthLoading ? (
-          <><SessionCardSkeleton /><SessionCardSkeleton /><SessionCardSkeleton /></>
+          <div className="sessions-grid">
+            <SessionCardSkeleton /><SessionCardSkeleton /><SessionCardSkeleton />
+          </div>
         ) : (
-          <>
+          <div className="sessions-grid">
             <SessionCard
               badge="Gratis"
               name="Encuentro inicial"
-              duration="⏱ 15 minutos · Comentamos tu caso y definimos un plan"
+              duration="15 minutos · Comentamos tu caso y definimos un plan de trabajo"
               price="Sin coste"
               isFree
+              vertical
               onClick={() => router.handleSessionClick("free15min")}
             />
             <SessionCard
               badge="Más reservada"
               name="Sesión de 1 hora"
-              duration="⏱ 60 minutos · Resolución de dudas o proyecto"
+              duration="60 minutos · Resolución de dudas, proyecto o preparación de examen"
               price="€16"
               featured
+              vertical
               onClick={() => router.handleSessionClick("session1h")}
             />
             <SessionCard
               name="Sesión de 2 horas"
-              duration="⏱ 120 minutos · Para temas que requieren profundidad"
+              duration="120 minutos · Para temas que requieren mayor profundidad"
               price="€30"
+              vertical
               onClick={() => router.handleSessionClick("session2h")}
             />
-          </>
+          </div>
         )}
       </section>
 
@@ -291,59 +296,111 @@ export default function InteractiveShell() {
         style={{
           height: 1,
           background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent)",
-          margin: "36px 0",
+          margin: "56px 0",
         }}
       />
 
       {/* ── Packs section ── */}
       <section style={{ animation: "fadeUp 0.6s ease both 0.5s" }}>
-        <p
-          style={{
-            fontSize: "11px",
-            fontWeight: 600,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            color: "#4edea3",
-            marginBottom: "10px",
-          }}
+        <div
+          className="packs-layout"
         >
-          Packs de clases
-        </p>
-        <h2
-          style={{
-            fontFamily: "var(--font-headline, Manrope), sans-serif",
-            fontSize: "clamp(1.3rem, 3.5vw, 1.8rem)",
-            fontWeight: 700,
-            letterSpacing: "-0.01em",
-            color: "#e5e1e4",
-            marginBottom: "6px",
-          }}
-        >
-          Compromiso a largo plazo, precio a medida
-        </h2>
-        <p style={{ fontSize: "13.5px", color: "#86948a", marginBottom: "24px" }}>
-          Compra horas con descuento y resérvalas a tu ritmo durante 6 meses.
-        </p>
+          {/* Left: value proposition */}
+          <div>
+            <p
+              style={{
+                fontSize: "11px",
+                fontWeight: 600,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "#4edea3",
+                marginBottom: "10px",
+              }}
+            >
+              Packs de continuidad
+            </p>
+            <h2
+              style={{
+                fontFamily: "var(--font-headline, Manrope), sans-serif",
+                fontSize: "clamp(1.4rem, 3vw, 2rem)",
+                fontWeight: 800,
+                letterSpacing: "-0.02em",
+                color: "#e5e1e4",
+                marginBottom: "12px",
+                lineHeight: 1.2,
+              }}
+            >
+              Compromiso a largo plazo,{" "}
+              <span
+                style={{
+                  background: "linear-gradient(135deg, #4edea3, #10b981)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                }}
+              >
+                precio a medida
+              </span>
+            </h2>
+            <p style={{ fontSize: "14px", color: "#86948a", lineHeight: 1.7, marginBottom: "28px" }}>
+              Compra horas con descuento y resérvalas a tu ritmo durante 6 meses. La opción más
+              inteligente si tienes un objetivo claro.
+            </p>
 
-        {isAuthLoading ? (
-          <div style={{ display: "flex", gap: 12 }}>
-            <PackCardSkeleton /><PackCardSkeleton />
+            {/* Benefits list */}
+            <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "14px" }}>
+              {[
+                "Precio por hora reducido respecto a sesiones sueltas",
+                "Reserva flexible: tú decides cuándo usar cada hora",
+                "Vigencia de 180 días desde la compra",
+                "Canal de comunicación directa para dudas entre sesiones",
+                "Acceso prioritario a nuevos horarios",
+              ].map((benefit) => (
+                <li key={benefit} style={{ display: "flex", alignItems: "flex-start", gap: "10px", fontSize: "13.5px", color: "#bbcabf" }}>
+                  <div
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: "50%",
+                      background: "rgba(78,222,163,0.12)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                      marginTop: 1,
+                    }}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4edea3" strokeWidth="3" strokeLinecap="round">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </div>
+                  {benefit}
+                </li>
+              ))}
+            </ul>
           </div>
-        ) : (
-          PACK_SIZES.map((size) => {
-            const cfg = PACK_CONFIG[size];
-            return (
-              <PackCard
-                key={size}
-                size={size}
-                price={cfg.price}
-                discount={cfg.discount}
-                recommended={"recommended" in cfg && cfg.recommended}
-                onClick={() => router.handlePackBuy(size as PackSize)}
-              />
-            );
-          })
-        )}
+
+          {/* Right: pack cards */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            {isAuthLoading ? (
+              <><PackCardSkeleton /><PackCardSkeleton /></>
+            ) : (
+              PACK_SIZES.map((size) => {
+                const cfg = PACK_CONFIG[size];
+                return (
+                  <PackCard
+                    key={size}
+                    size={size}
+                    price={cfg.price}
+                    discount={cfg.discount}
+                    recommended={"recommended" in cfg && cfg.recommended}
+                    onClick={() => router.handlePackBuy(size as PackSize)}
+                  />
+                );
+              })
+            )}
+          </div>
+        </div>
       </section>
 
       {/* ── Chat assistant ── */}

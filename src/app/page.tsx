@@ -2,26 +2,12 @@ import { Suspense } from "react";
 import { Spinner } from "@/components/ui";
 import HeroSection from "@/features/landing/HeroSection";
 import BiographySection from "@/features/landing/BiographySection";
+import SpecializationsSection from "@/features/landing/SpecializationsSection";
+import ConsultingSection from "@/features/landing/ConsultingSection";
 import TrustBar from "@/features/landing/TrustBar";
 import InteractiveShell from "@/features/booking/InteractiveShell";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-
-/**
- * page.tsx — Emerald Nocturne redesign
- *
- * Layout (top → bottom):
- *   Navbar          (fixed, sticky — client component, auth-aware)
- *   HeroSection     (RSC — static, no JS)
- *   BiographySection (RSC — new, Case B)
- *   ──── divider ────
- *   InteractiveShell (client boundary — all booking/auth state)
- *   TrustBar         (RSC — static)
- *   Footer           (RSC — includes FooterModals client island)
- *
- * The full-width Navbar and Footer live outside the centered content column.
- * The column max-width matches the original (680px) for the booking shell.
- */
 
 export default function HomePage() {
   return (
@@ -35,43 +21,44 @@ export default function HomePage() {
         </div>
       }
     >
-      {/* Fixed nav — full width, sits above everything */}
       <Navbar />
 
       <main style={{ position: "relative", zIndex: 1 }}>
-        {/* ── Centered content column ── */}
         <div
+          className="landing-column"
           style={{
-            maxWidth: 680,
+            maxWidth: 1200,
             margin: "0 auto",
-            padding: "0 24px 80px",
             position: "relative",
             zIndex: 1,
           }}
         >
-          {/* Static RSC sections */}
           <HeroSection />
-
-          {/* Biography — Case B: integrated with new styling */}
           <BiographySection />
+          <SpecializationsSection />
 
-          {/* Divider */}
           <div
             style={{
               height: 1,
               background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent)",
-              margin: "8px 0 36px",
+              margin: "64px 0",
             }}
           />
 
-          {/* Client island — all interactive booking/auth state */}
-          <InteractiveShell />
+          <ConsultingSection />
 
-          {/* Static trust bar */}
+          <div
+            style={{
+              height: 1,
+              background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent)",
+              margin: "64px 0",
+            }}
+          />
+
+          <InteractiveShell />
           <TrustBar />
         </div>
 
-        {/* CSS animations scoped to landing */}
         <style>{`
           @keyframes fadeUp {
             from { opacity: 0; transform: translateY(20px); }
@@ -84,7 +71,6 @@ export default function HomePage() {
         `}</style>
       </main>
 
-      {/* Full-width footer */}
       <Footer />
     </Suspense>
   );
