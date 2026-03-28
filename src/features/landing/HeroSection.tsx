@@ -37,11 +37,11 @@ export default function HeroSection() {
           <div
             style={{
               position: "absolute",
-              inset: -6,
-              borderRadius: "50%",
-              background: "radial-gradient(circle, rgba(78,222,163,0.25) 0%, transparent 70%)",
-              filter: "blur(8px)",
-              opacity: 0.8,
+              inset: -4,
+              borderRadius: "18px",
+              background: "linear-gradient(135deg, #4edea3, #10b981)",
+              filter: "blur(12px)",
+              opacity: 0.35,
             }}
           />
           <div
@@ -49,7 +49,7 @@ export default function HeroSection() {
               position: "relative",
               width: 140,
               height: 140,
-              borderRadius: "50%",
+              borderRadius: "12px",
               overflow: "hidden",
               border: "2px solid rgba(78,222,163,0.3)",
               boxShadow: "0 0 0 1px rgba(78,222,163,0.15), 0 20px 60px rgba(0,0,0,0.5)",
@@ -69,7 +69,7 @@ export default function HeroSection() {
         <div style={{ marginBottom: "16px" }}>
           <p
             style={{
-              fontSize: "11px",
+              fontSize: "0.875rem",
               fontWeight: 700,
               letterSpacing: "0.3em",
               textTransform: "uppercase",
@@ -105,10 +105,11 @@ export default function HeroSection() {
           <span
             style={{
               display: "block",
-              fontSize: "clamp(1.1rem, 2.5vw, 1.5rem)",
+              fontSize: "clamp(1.5rem, 3.5vw, 1.875rem)",
               fontWeight: 400,
+              lineHeight: 1.4,
               color: "#bbcabf",
-              letterSpacing: "-0.01em",
+              letterSpacing: 0,
               marginBottom: "16px",
             }}
           >

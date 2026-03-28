@@ -4,7 +4,6 @@ import HeroSection from "@/features/landing/HeroSection";
 import BiographySection from "@/features/landing/BiographySection";
 import SpecializationsSection from "@/features/landing/SpecializationsSection";
 import ConsultingSection from "@/features/landing/ConsultingSection";
-import TrustBar from "@/features/landing/TrustBar";
 import InteractiveShell from "@/features/booking/InteractiveShell";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -56,7 +55,6 @@ export default function HomePage() {
           />
 
           <InteractiveShell />
-          <TrustBar />
         </div>
 
         <style>{`

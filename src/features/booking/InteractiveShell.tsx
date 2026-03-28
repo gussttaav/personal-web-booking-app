@@ -62,7 +62,7 @@ function PackCardSkeleton() {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function InteractiveShell() {
-  const { googleUser, isSignedIn, isAuthLoading, packSession, updateCredits } =
+  const { googleUser, isSignedIn, isAuthLoading, packSession, creditsLoading, updateCredits } =
     useUserSession();
 
   const router     = useBookingRouter(isSignedIn, packSession?.credits ?? 0);
@@ -387,6 +387,7 @@ export default function InteractiveShell() {
             ) : (
               PACK_SIZES.map((size) => {
                 const cfg = PACK_CONFIG[size];
+                const hasActiveCredits = (packSession?.credits ?? 0) > 0 && packSession?.packSize === size;
                 return (
                   <PackCard
                     key={size}
@@ -394,7 +395,10 @@ export default function InteractiveShell() {
                     price={cfg.price}
                     discount={cfg.discount}
                     recommended={"recommended" in cfg && cfg.recommended}
+                    activeCredits={creditsLoading ? null : hasActiveCredits ? (packSession?.credits ?? null) : null}
+                    creditsLoading={creditsLoading && isSignedIn}
                     onClick={() => router.handlePackBuy(size as PackSize)}
+                    onSchedule={router.handlePackSchedule}
                   />
                 );
               })
