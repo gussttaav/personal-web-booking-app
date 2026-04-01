@@ -302,109 +302,59 @@ export default function InteractiveShell() {
 
       {/* ── Packs section ── */}
       <section style={{ animation: "fadeUp 0.6s ease both 0.5s" }}>
-        <div
-          className="packs-layout"
+        <p
+          style={{
+            fontSize: "11px",
+            fontWeight: 600,
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            color: "#4edea3",
+            marginBottom: "10px",
+          }}
         >
-          {/* Left: value proposition */}
-          <div>
-            <p
-              style={{
-                fontSize: "11px",
-                fontWeight: 600,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: "#4edea3",
-                marginBottom: "10px",
-              }}
-            >
-              Packs de continuidad
-            </p>
-            <h2
-              style={{
-                fontFamily: "var(--font-headline, Manrope), sans-serif",
-                fontSize: "clamp(1.4rem, 3vw, 2rem)",
-                fontWeight: 800,
-                letterSpacing: "-0.02em",
-                color: "#e5e1e4",
-                marginBottom: "12px",
-                lineHeight: 1.2,
-              }}
-            >
-              Compromiso a largo plazo,{" "}
-              <span
-                style={{
-                  background: "linear-gradient(135deg, #4edea3, #10b981)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                }}
-              >
-                precio a medida
-              </span>
-            </h2>
-            <p style={{ fontSize: "14px", color: "#86948a", lineHeight: 1.7, marginBottom: "28px" }}>
-              Compra horas con descuento y resérvalas a tu ritmo durante 6 meses. La opción más
-              inteligente si tienes un objetivo claro.
-            </p>
+          Packs de continuidad
+        </p>
+        <h2
+          style={{
+            fontFamily: "var(--font-headline, Manrope), sans-serif",
+            fontSize: "clamp(1.4rem, 3.5vw, 2rem)",
+            fontWeight: 800,
+            letterSpacing: "-0.02em",
+            color: "#e5e1e4",
+            marginBottom: "8px",
+          }}
+        >
+          Más horas, mejor precio.
+        </h2>
+        <p style={{ fontSize: "14px", color: "#86948a", marginBottom: "32px" }}>
+          Reserva a tu ritmo durante 6 meses y ahorra respecto a las sesiones sueltas.
+        </p>
 
-            {/* Benefits list */}
-            <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "14px" }}>
-              {[
-                "Precio por hora reducido respecto a sesiones sueltas",
-                "Reserva flexible: tú decides cuándo usar cada hora",
-                "Vigencia de 180 días desde la compra",
-                "Canal de comunicación directa para dudas entre sesiones",
-                "Acceso prioritario a nuevos horarios",
-              ].map((benefit) => (
-                <li key={benefit} style={{ display: "flex", alignItems: "flex-start", gap: "10px", fontSize: "13.5px", color: "#bbcabf" }}>
-                  <div
-                    style={{
-                      width: 20,
-                      height: 20,
-                      borderRadius: "50%",
-                      background: "rgba(78,222,163,0.12)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                      marginTop: 1,
-                    }}
-                  >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4edea3" strokeWidth="3" strokeLinecap="round">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                  </div>
-                  {benefit}
-                </li>
-              ))}
-            </ul>
+        {isAuthLoading ? (
+          <div className="packs-grid">
+            <PackCardSkeleton /><PackCardSkeleton />
           </div>
-
-          {/* Right: pack cards */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-            {isAuthLoading ? (
-              <><PackCardSkeleton /><PackCardSkeleton /></>
-            ) : (
-              PACK_SIZES.map((size) => {
-                const cfg = PACK_CONFIG[size];
-                const hasActiveCredits = (packSession?.credits ?? 0) > 0 && packSession?.packSize === size;
-                return (
-                  <PackCard
-                    key={size}
-                    size={size}
-                    price={cfg.price}
-                    discount={cfg.discount}
-                    recommended={"recommended" in cfg && cfg.recommended}
-                    activeCredits={creditsLoading ? null : hasActiveCredits ? (packSession?.credits ?? null) : null}
-                    creditsLoading={creditsLoading && isSignedIn}
-                    onClick={() => router.handlePackBuy(size as PackSize)}
-                    onSchedule={router.handlePackSchedule}
-                  />
-                );
-              })
-            )}
+        ) : (
+          <div className="packs-grid">
+            {PACK_SIZES.map((size) => {
+              const cfg = PACK_CONFIG[size];
+              const hasActiveCredits = (packSession?.credits ?? 0) > 0 && packSession?.packSize === size;
+              return (
+                <PackCard
+                  key={size}
+                  size={size}
+                  price={cfg.price}
+                  discount={"savingsPill" in cfg ? cfg.savingsPill : ""}
+                  recommended={"recommended" in cfg && cfg.recommended}
+                  activeCredits={creditsLoading ? null : hasActiveCredits ? (packSession?.credits ?? null) : null}
+                  creditsLoading={creditsLoading && isSignedIn}
+                  onClick={() => router.handlePackBuy(size as PackSize)}
+                  onSchedule={router.handlePackSchedule}
+                />
+              );
+            })}
           </div>
-        </div>
+        )}
       </section>
 
       {/* ── Chat assistant ── */}

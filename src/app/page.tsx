@@ -36,6 +36,8 @@ export default function HomePage() {
           <BiographySection />
           <SpecializationsSection />
 
+          <InteractiveShell />
+
           <div
             style={{
               height: 1,
@@ -45,16 +47,6 @@ export default function HomePage() {
           />
 
           <ConsultingSection />
-
-          <div
-            style={{
-              height: 1,
-              background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent)",
-              margin: "64px 0",
-            }}
-          />
-
-          <InteractiveShell />
         </div>
 
         <style>{`

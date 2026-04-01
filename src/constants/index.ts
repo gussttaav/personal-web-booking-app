@@ -47,19 +47,23 @@ export const PACK_SIZES = [5, 10] as const;
 
 export const PACK_CONFIG = {
   5: {
-    hours:       5,
-    price:       "$200",
-    priceNumber: 200,
-    discount:    "Ahorra $25",
-    label:       "Pack 5 Horas",
+    hours:         5,
+    price:         "€75",
+    priceNumber:   75,
+    originalPrice: "€80",
+    savingsPill:   "Ahorras €5 · 6% dto.",
+    hourlyRate:    "€15",
+    label:         "Pack Esencial",
   },
   10: {
-    hours:       10,
-    price:       "$360",
-    priceNumber: 360,
-    discount:    "Máximo valor — ahorra $40",
-    label:       "Pack 10 Horas",
-    recommended: true,
+    hours:         10,
+    price:         "€140",
+    priceNumber:   140,
+    originalPrice: "€160",
+    savingsPill:   "Ahorras €20 · 12% dto.",
+    hourlyRate:    "€14",
+    label:         "Pack Intensivo",
+    recommended:   true,
   },
 } as const;
 

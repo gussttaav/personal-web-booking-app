@@ -27,14 +27,7 @@ export default function Footer() {
     >
       <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "0 32px" }}>
         {/* ── Grid ── */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-            gap: "48px",
-            marginBottom: "48px",
-          }}
-        >
+        <div className="footer-grid" style={{ marginBottom: "48px" }}>
           {/* Brand */}
           <div>
             <div
@@ -50,7 +43,7 @@ export default function Footer() {
               GUSTAVOAI.DEV
             </div>
             <p style={{ fontSize: "13px", color: "#86948a", lineHeight: 1.65, marginBottom: "20px" }}>
-              Ingeniería de precisión en educación profesional y académica.
+              Clases particulares y consultoría en<br />programación, matemáticas e IA.
             </p>
             <div style={{ display: "flex", gap: "10px" }}>
               <a
@@ -101,6 +94,43 @@ export default function Footer() {
                   <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
                 </svg>
               </a>
+            </div>
+          </div>
+
+          {/* Explorar */}
+          <div>
+            <h4
+              style={{
+                fontFamily: "var(--font-headline, Manrope), sans-serif",
+                fontSize: "13px",
+                fontWeight: 700,
+                color: "#e5e1e4",
+                marginBottom: "20px",
+              }}
+            >
+              Explorar
+            </h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {[
+                { label: "Cursos", href: "#" },
+                { label: "Mentoría", href: "#" },
+                { label: "Blog", href: "#" },
+              ].map(({ label, href }) => (
+                <a
+                  key={label}
+                  href={href}
+                  style={{
+                    fontSize: "13px",
+                    color: "#86948a",
+                    textDecoration: "none",
+                    transition: "color 0.15s",
+                  }}
+                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#4edea3")}
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "#86948a")}
+                >
+                  {label}
+                </a>
+              ))}
             </div>
           </div>
 
@@ -241,34 +271,81 @@ export default function Footer() {
           </div>
 
           {/* Payment security + card logos */}
-          <div style={{ display: "flex", alignItems: "center", gap: "16px", opacity: 0.5 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", paddingRight: "16px", borderRight: "1px solid rgba(255,255,255,0.08)" }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#86948a" strokeWidth="2" strokeLinecap="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+            {/* Secure badge */}
+            <span
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+                fontSize: "12px",
+                color: "#86948a",
+                paddingRight: "10px",
+                borderRight: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="#4edea3" aria-hidden="true">
+                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM12 17c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2z"/>
               </svg>
-              <span style={{ fontSize: "10px", letterSpacing: "0.06em", textTransform: "uppercase", color: "#86948a", whiteSpace: "nowrap" }}>
-                Pago seguro · Stripe
-              </span>
-            </div>
+              Pago seguro · Stripe
+            </span>
             {/* Visa */}
-            <div style={{ padding: "3px 7px", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "4px", background: "rgba(255,255,255,0.02)" }}>
-              <svg height="11" viewBox="0 0 60 20" fill="#e5e1e4" aria-label="Visa">
-                <path d="M26.9 1.1L24.5 18.9H20.3L22.7 1.1H26.9ZM44.9 12.7L47.2 6.2L48.5 12.7H44.9ZM49.7 18.9H53.7L50.2 1.1H46.6C45.8 1.1 45.1 1.6 44.8 2.3L38.4 18.9H42.7L43.6 16.3H48.9L49.7 18.9ZM38.9 13.3C38.9 9 32.7 8.8 32.8 6.9C32.8 6.3 33.3 5.7 34.6 5.5C35.2 5.4 36.9 5.3 38.8 6.2L39.6 2.4C38.6 2 37.3 1.7 35.7 1.7C31.7 1.7 28.9 3.9 28.9 7.1C28.9 9.4 31 10.7 32.5 11.4C34.1 12.2 34.6 12.7 34.6 13.4C34.6 14.4 33.4 14.9 32.4 14.9C30.3 14.9 29.1 14.3 28.1 13.8L27.3 17.7C28.3 18.2 30.1 18.6 32 18.6C36.3 18.6 39 16.4 39 12.9L38.9 13.3ZM21.3 1.1L14.7 18.9H10.3L7.1 4.3C6.9 3.4 6.7 3 6 2.7C4.9 2.1 3 1.6 1.4 1.3L1.5 1.1H8.8C9.7 1.1 10.5 1.7 10.7 2.7L12.4 12.2L16.7 1.1H21.3Z"/>
+            <span
+              aria-label="Visa"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "4px 8px",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: "6px",
+                background: "rgba(255,255,255,0.03)",
+                lineHeight: 1,
+              }}
+            >
+              <svg width="32" height="11" viewBox="0 0 50 17" aria-hidden="true">
+                <text x="0" y="14" fontSize="16" fontWeight="800" fontFamily="Arial,sans-serif" fill="#1A1F71">VISA</text>
               </svg>
-            </div>
+            </span>
             {/* Mastercard */}
-            <div style={{ padding: "3px 7px", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "4px", background: "rgba(255,255,255,0.02)" }}>
-              <svg height="16" viewBox="0 0 38 24" aria-label="Mastercard">
-                <rect width="15" height="24" x="0" y="0" fill="#e5e1e4" rx="2"/>
-                <rect width="15" height="24" x="23" y="0" fill="#bbcabf" rx="2"/>
-                <path fill="#e5e1e4" d="M19 4.3a10 10 0 0 1 0 15.4A10 10 0 0 1 19 4.3z"/>
+            <span
+              aria-label="Mastercard"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "4px 8px",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: "6px",
+                background: "rgba(255,255,255,0.03)",
+                lineHeight: 1,
+              }}
+            >
+              <svg width="28" height="18" viewBox="0 0 38 24" aria-hidden="true">
+                <circle cx="14" cy="12" r="8" fill="#EB001B"/>
+                <circle cx="24" cy="12" r="8" fill="#F79E1B"/>
+                <path d="M19 5.6a8 8 0 0 1 0 12.8A8 8 0 0 1 19 5.6z" fill="#FF5F00"/>
               </svg>
-            </div>
+            </span>
             {/* Amex */}
-            <div style={{ padding: "3px 7px", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "4px", background: "rgba(255,255,255,0.02)" }}>
-              <span style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.05em", color: "#e5e1e4", fontFamily: "var(--font-headline, Manrope), sans-serif" }}>AMEX</span>
-            </div>
+            <span
+              aria-label="American Express"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "4px 8px",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: "6px",
+                background: "rgba(255,255,255,0.03)",
+                lineHeight: 1,
+              }}
+            >
+              <svg width="28" height="18" viewBox="0 0 38 24" aria-hidden="true">
+                <rect width="38" height="24" rx="3" fill="#016FD0"/>
+                <text x="4" y="17" fontSize="9" fontWeight="700" fontFamily="Arial,sans-serif" fill="white">AMEX</text>
+              </svg>
+            </span>
           </div>
         </div>
       </div>

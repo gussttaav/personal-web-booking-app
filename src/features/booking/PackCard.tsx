@@ -1,16 +1,7 @@
 "use client";
 
-/**
- * PackCard — Emerald Nocturne reskin
- *
- * Props interface: restored to full original — includes active state (activeCredits,
- * creditsLoading, onSchedule) plus Emerald Nocturne visual tokens.
- *
- * Active state: green background/border + "Pack activo" ribbon + credits count
- * + "Reservar clase" CTA when user has credits for this specific pack size.
- */
-
 import type { PackSize } from "@/types";
+import { PACK_CONFIG } from "@/constants";
 
 interface PackCardProps {
   size: PackSize;
@@ -25,21 +16,21 @@ interface PackCardProps {
 
 export default function PackCard({
   size,
-  price,
-  discount,
   recommended = false,
   activeCredits,
   creditsLoading,
   onClick,
   onSchedule,
 }: PackCardProps) {
-  const features =
-    size === 10
-      ? ["Ahorro de hasta el 20%", "Canal privado Slack/Discord", "Vigencia de 180 días"]
-      : ["Ahorra sobre precio base", "Vigencia de 180 días"];
-
+  const cfg = PACK_CONFIG[size];
   const hasCredits = !creditsLoading && activeCredits !== null && activeCredits > 0;
-  const isHighlighted = hasCredits || recommended;
+  const isPrimary = recommended || hasCredits;
+
+  const benefits = [
+    `${cfg.hours} sesiones de 1 hora`,
+    "Reserva flexible — tú decides cuándo",
+    "Vigencia de 180 días",
+  ];
 
   return (
     <div
@@ -52,33 +43,35 @@ export default function PackCard({
           : recommended
           ? "rgba(78,222,163,0.05)"
           : "#201f22",
-        border: isHighlighted
+        border: isPrimary
           ? "1px solid rgba(78,222,163,0.35)"
           : "1px solid rgba(255,255,255,0.06)",
-        borderRadius: "12px",
+        borderRadius: "16px",
         overflow: "hidden",
-        marginBottom: "12px",
+        display: "flex",
+        flexDirection: "column",
         transition: "border-color 0.2s",
       }}
       onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.borderColor = isHighlighted
+        (e.currentTarget as HTMLElement).style.borderColor = isPrimary
           ? "rgba(78,222,163,0.55)"
           : "rgba(78,222,163,0.2)";
       }}
       onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.borderColor = isHighlighted
+        (e.currentTarget as HTMLElement).style.borderColor = isPrimary
           ? "rgba(78,222,163,0.35)"
           : "rgba(255,255,255,0.06)";
       }}
     >
-      {/* Top-right ribbon */}
+
+      {/* Top-right badge */}
       {(hasCredits || recommended) && (
         <div
           style={{
             position: "absolute",
             top: 0,
             right: 0,
-            padding: "4px 10px",
+            padding: "5px 12px",
             background: "#4edea3",
             color: "#003824",
             fontSize: "9px",
@@ -86,88 +79,139 @@ export default function PackCard({
             letterSpacing: "0.08em",
             textTransform: "uppercase",
             fontFamily: "var(--font-headline, Manrope), sans-serif",
-            borderBottomLeftRadius: "8px",
+            borderBottomLeftRadius: "10px",
           }}
         >
           {hasCredits ? "Pack activo" : "Recomendado"}
         </div>
       )}
 
-      {/* Header row */}
+      {/* ── Pack name ── */}
       <div
         style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          marginBottom: "6px",
-          paddingRight: isHighlighted ? "84px" : "0",
+          fontFamily: "var(--font-headline, Manrope), sans-serif",
+          fontSize: "18px",
+          fontWeight: 700,
+          color: "#e5e1e4",
+          letterSpacing: "-0.01em",
+          marginBottom: "16px",
+          paddingRight: isPrimary ? "90px" : "0",
         }}
       >
-        <div
-          style={{
-            fontFamily: "var(--font-headline, Manrope), sans-serif",
-            fontSize: "17px",
-            fontWeight: 700,
-            color: "#e5e1e4",
-            letterSpacing: "-0.01em",
-          }}
-        >
-          Pack {size} Horas
-        </div>
-        <div
-          style={{
-            fontFamily: "var(--font-headline, Manrope), sans-serif",
-            fontSize: "26px",
-            fontWeight: 800,
-            color: "#4edea3",
-            letterSpacing: "-0.02em",
-          }}
-        >
-          {price}
-        </div>
+        {cfg.label}
       </div>
 
-      {/* Credits or discount subtitle */}
+      {/* ── Active credits state ── */}
       {creditsLoading ? (
         <div
           style={{
             height: "16px",
-            width: "130px",
+            width: "140px",
             borderRadius: "4px",
             background: "#2a2a2c",
-            marginBottom: "18px",
+            marginBottom: "20px",
             animation: "skeletonPulse 1.4s ease-in-out infinite",
           }}
         />
       ) : hasCredits ? (
-        <div style={{ fontSize: "12px", marginBottom: "18px" }}>
-          <span style={{ color: "#4edea3", fontWeight: 600 }}>
-            {activeCredits} clase{activeCredits !== 1 ? "s" : ""} disponible
-            {activeCredits !== 1 ? "s" : ""}
+        <div style={{ marginBottom: "20px" }}>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "7px",
+              padding: "4px 10px",
+              borderRadius: "100px",
+              background: "rgba(78,222,163,0.1)",
+              border: "1px solid rgba(78,222,163,0.25)",
+              fontSize: "12px",
+              fontWeight: 600,
+              color: "#4edea3",
+            }}
+          >
+            <span
+              style={{
+                width: "7px",
+                height: "7px",
+                borderRadius: "50%",
+                background: "#4edea3",
+                flexShrink: 0,
+                animation: "blink 1.4s ease-in-out infinite",
+              }}
+            />
+            {activeCredits} clase{activeCredits !== 1 ? "s" : ""} disponible{activeCredits !== 1 ? "s" : ""}
           </span>
-          <span style={{ color: "#86948a" }}> · pendiente{activeCredits !== 1 ? "s" : ""} de reservar</span>
+          <style>{`@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }`}</style>
         </div>
       ) : (
-        <p style={{ fontSize: "12px", color: "#bbcabf", marginBottom: "18px" }}>
-          {discount}
-        </p>
+        <>
+          {/* ── Price row ── */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "6px" }}>
+            <span
+              style={{
+                fontFamily: "var(--font-headline, Manrope), sans-serif",
+                fontSize: "2rem",
+                fontWeight: 800,
+                color: "#4edea3",
+                letterSpacing: "-0.02em",
+                lineHeight: 1,
+              }}
+            >
+              {cfg.price}
+            </span>
+            <span
+              style={{
+                fontSize: "14px",
+                color: "#86948a",
+                textDecoration: "line-through",
+                lineHeight: 1,
+              }}
+            >
+              {cfg.originalPrice}
+            </span>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "3px 8px",
+                background: "rgba(78,222,163,0.1)",
+                border: "1px solid rgba(78,222,163,0.2)",
+                borderRadius: "100px",
+                fontSize: "11px",
+                fontWeight: 600,
+                color: "#4edea3",
+                letterSpacing: "0.01em",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {cfg.savingsPill}
+            </span>
+          </div>
+
+          {/* ── Per-hour rate ── */}
+          <div style={{ fontSize: "13px", color: "#86948a", marginBottom: "20px", lineHeight: 1 }}>
+            <span style={{ color: "#4edea3", fontWeight: 600 }}>{cfg.hourlyRate} / hora</span>
+            {" · vs €16 en sesión suelta"}
+          </div>
+        </>
       )}
 
-      {/* Feature list */}
+      {/* ── Benefits list ── */}
       <ul
         style={{
           listStyle: "none",
           padding: 0,
-          margin: "0 0 20px 0",
+          margin: "0 0 24px 0",
           display: "flex",
           flexDirection: "column",
-          gap: "8px",
+          gap: "10px",
+          flex: 1,
         }}
       >
-        {features.map((f) => (
+        {benefits.map((benefit) => (
           <li
-            key={f}
-            style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "13px", color: "#bbcabf" }}
+            key={benefit}
+            style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "13.5px", color: "#bbcabf" }}
           >
             <div
               style={{
@@ -181,38 +225,32 @@ export default function PackCard({
                 flexShrink: 0,
               }}
             >
-              <svg
-                width="10"
-                height="10"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#4edea3"
-                strokeWidth="3"
-                strokeLinecap="round"
-              >
-                <polyline points="20 6 9 17 4 12" />
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4edea3" strokeWidth="3" strokeLinecap="round">
+                <polyline points="20 6 9 17 4 12"/>
               </svg>
             </div>
-            {f}
+            {benefit}
           </li>
         ))}
       </ul>
 
-      {/* CTA button */}
+      {/* ── CTA button ── */}
       <button
         onClick={hasCredits ? onSchedule : onClick}
         style={{
           display: "block",
           width: "100%",
-          padding: "11px",
+          padding: "12px",
           borderRadius: "8px",
-          border: isHighlighted
-            ? "1px solid rgba(78,222,163,0.5)"
-            : "1px solid rgba(60,74,66,0.4)",
-          background: isHighlighted ? "linear-gradient(135deg, #4edea3, #10b981)" : "transparent",
-          color: isHighlighted ? "#003824" : "#bbcabf",
+          border: isPrimary
+            ? "none"
+            : "1px solid rgba(78,222,163,0.25)",
+          background: isPrimary
+            ? "linear-gradient(135deg, #4edea3, #10b981)"
+            : "rgba(78,222,163,0.06)",
+          color: isPrimary ? "#003824" : "#bbcabf",
           fontFamily: "var(--font-headline, Manrope), sans-serif",
-          fontSize: "13px",
+          fontSize: "14px",
           fontWeight: 700,
           cursor: "pointer",
           transition: "filter 0.15s, background 0.15s, border-color 0.15s, color 0.15s",
@@ -220,27 +258,28 @@ export default function PackCard({
         }}
         onMouseEnter={(e) => {
           const btn = e.currentTarget as HTMLButtonElement;
-          if (isHighlighted) {
+          if (isPrimary) {
             btn.style.filter = "brightness(1.08)";
           } else {
-            btn.style.background = "rgba(78,222,163,0.06)";
+            btn.style.background = "rgba(78,222,163,0.12)";
             btn.style.borderColor = "rgba(78,222,163,0.4)";
             btn.style.color = "#4edea3";
           }
         }}
         onMouseLeave={(e) => {
           const btn = e.currentTarget as HTMLButtonElement;
-          if (isHighlighted) {
+          if (isPrimary) {
             btn.style.filter = "brightness(1)";
           } else {
-            btn.style.background = "transparent";
-            btn.style.borderColor = "rgba(60,74,66,0.4)";
+            btn.style.background = "rgba(78,222,163,0.06)";
+            btn.style.borderColor = "rgba(78,222,163,0.25)";
             btn.style.color = "#bbcabf";
           }
         }}
       >
-        {hasCredits ? "Reservar clase" : `Comprar pack · ${price}`}
+        {hasCredits ? "Reservar clase" : `Comprar pack · ${cfg.price}`}
       </button>
+
     </div>
   );
 }

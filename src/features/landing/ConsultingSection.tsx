@@ -1,19 +1,19 @@
 const FEATURES = [
   {
-    title: "Diagnóstico de oportunidades IA",
-    desc: "Identificamos qué procesos de tu empresa pueden beneficiarse de la inteligencia artificial.",
+    title: "Implantación y automatización con IA",
+    desc: "Diseño e integración de agentes y flujos inteligentes adaptados a tus procesos de negocio.",
+  },
+  {
+    title: "Análisis de datos y toma de decisiones",
+    desc: "Extracción de valor de tus datos para apoyar decisiones estratégicas con base estadística.",
   },
   {
     title: "Formación técnica para equipos",
-    desc: "Talleres prácticos para que tu equipo comprenda y adopte las herramientas de IA.",
+    desc: "Programación, arquitectura de software, IA y buenas prácticas. Adaptado al nivel y stack de tu equipo.",
   },
   {
-    title: "Implementación de agentes y automatizaciones",
-    desc: "Diseño e implementación de flujos de trabajo inteligentes adaptados a tu negocio.",
-  },
-  {
-    title: "Soporte técnico continuo",
-    desc: "Acompañamiento durante todo el proceso de adopción tecnológica.",
+    title: "Arquitectura y revisión de sistemas",
+    desc: "Auditoría y rediseño de backends, APIs y microservicios para mejorar escalabilidad y mantenibilidad.",
   },
 ];
 
@@ -25,7 +25,7 @@ export default function ConsultingSection() {
         style={{
           fontSize: "11px",
           fontWeight: 600,
-          letterSpacing: "0.08em",
+          letterSpacing: "0.1em",
           textTransform: "uppercase",
           color: "#4edea3",
           marginBottom: "10px",
@@ -65,7 +65,7 @@ export default function ConsultingSection() {
               <h2
                 style={{
                   fontFamily: "var(--font-headline, Manrope), sans-serif",
-                  fontSize: "clamp(1.75rem, 4vw, 2.5rem)",
+                  fontSize: "clamp(1.75rem, 4vw, 2.75rem)",
                   fontWeight: 800,
                   letterSpacing: "-0.02em",
                   color: "#e5e1e4",
@@ -160,7 +160,7 @@ export default function ConsultingSection() {
                 <div
                   style={{
                     fontFamily: "var(--font-headline, Manrope), sans-serif",
-                    fontSize: "0.875rem",
+                    fontSize: "0.9375rem",
                     fontWeight: 700,
                     color: "#e5e1e4",
                     marginBottom: "6px",
@@ -169,7 +169,7 @@ export default function ConsultingSection() {
                 >
                   {feature.title}
                 </div>
-                <p style={{ fontSize: "0.8rem", color: "#86948a", lineHeight: 1.6, margin: 0 }}>
+                <p style={{ fontSize: "0.875rem", color: "#86948a", lineHeight: 1.65, margin: 0 }}>
                   {feature.desc}
                 </p>
               </div>

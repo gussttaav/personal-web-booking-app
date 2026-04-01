@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+::selection {
+  background-color: rgba(78, 222, 163, 0.3); /* var(--green) at 30% */
+  color: #4edea3;                            /* var(--green) */
+}
+
 /* ─── Emerald Nocturne Design Tokens ────────────────────────────────────────── */
 :root {
   /* Surface Hierarchy */
@@ -640,7 +645,7 @@ body::after {
   .sessions-grid button { transform: none !important; box-shadow: none !important; }
 }
 
-/* Packs 2-col layout (only on lg+) */
+/* Packs 2-col layout (only on lg+) — legacy, kept for safety */
 .packs-layout {
   display: grid;
   grid-template-columns: 1fr;
@@ -649,4 +654,28 @@ body::after {
 }
 @media (min-width: 1024px) {
   .packs-layout { grid-template-columns: 1fr 1fr; gap: 48px; }
+}
+
+/* Footer grid — 1 col mobile, 2 col sm, 4 col md+ */
+.footer-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 32px;
+}
+@media (min-width: 560px) {
+  .footer-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
+}
+@media (min-width: 768px) {
+  .footer-grid { grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; }
+}
+
+/* Packs 2-col grid (mirrors sessions-grid, 2 cols on md+) */
+.packs-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+@media (min-width: 768px) {
+  .packs-grid { grid-template-columns: repeat(2, 1fr); }
 }

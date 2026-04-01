@@ -443,10 +443,10 @@ export default function HeroSection() {
           }}
         >
           <StatCard
-            value="10+"
+            value="15+"
             label="Años de experiencia"
             modalTitle="Años de experiencia"
-            modalBody="Más de 10 años combinando desarrollo de software, investigación y docencia, clases online y consultoría en programación, matemáticas e IA."
+            modalBody="Más de 15 años combinando desarrollo de software, investigación y docencia, clases online y consultoría en programación, matemáticas e IA."
             modalLinkLabel="Ver perfil en LinkedIn"
             modalLinkHref="https://www.linkedin.com/in/gustavo-torres-guerrero"
           />
