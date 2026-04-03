@@ -8,6 +8,7 @@
  * the landing page (matches booking.html layout).
  */
 
+import { useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
@@ -16,6 +17,17 @@ interface BookingLayoutProps {
 }
 
 export default function BookingLayout({ children }: BookingLayoutProps) {
+  // Hide the document scrollbar while the overlay is mounted so only the
+  // overlay's own scrollbar is visible (globals.css sets overflow-y:scroll
+  // on <html>, which would otherwise show a second, non-functional scrollbar).
+  useEffect(() => {
+    const html = document.documentElement;
+    const prev = html.style.overflowY;
+    html.style.overflowY = "hidden";
+    return () => {
+      html.style.overflowY = prev;
+    };
+  }, []);
   return (
     <div
       style={{

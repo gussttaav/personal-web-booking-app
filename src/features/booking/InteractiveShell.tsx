@@ -90,6 +90,22 @@ export default function InteractiveShell() {
     return () => window.removeEventListener("open-pack-booking", handler);
   }, [router.handlePackSchedule]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Allow the Navbar to close booking overlays (logo / Mentoría clicks)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { scrollTo } = ((e as CustomEvent).detail ?? {}) as { scrollTo?: string };
+      router.closePackBooking();
+      router.closeSession();
+      if (scrollTo) {
+        setTimeout(() => {
+          document.querySelector(scrollTo)?.scrollIntoView({ behavior: "smooth" });
+        }, 50);
+      }
+    };
+    window.addEventListener("close-booking-overlay", handler);
+    return () => window.removeEventListener("close-booking-overlay", handler);
+  }, [router.closePackBooking, router.closeSession]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const packStudentInfo = packSession
     ? { email: packSession.email, name: packSession.name, credits: packSession.credits }
     : googleUser?.email

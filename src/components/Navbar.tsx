@@ -39,6 +39,20 @@ export default function Navbar() {
     openPackBooking();
   };
 
+  const handleLogoClick = () => {
+    window.dispatchEvent(new CustomEvent("close-booking-overlay"));
+  };
+
+  const handleNavLinkClick = (e: React.MouseEvent, href: string) => {
+    if (href === "#sessions") {
+      e.preventDefault();
+      setMobileOpen(false);
+      window.dispatchEvent(
+        new CustomEvent("close-booking-overlay", { detail: { scrollTo: "#sessions" } })
+      );
+    }
+  };
+
   return (
     <nav
       className="fixed top-0 w-full z-50"
@@ -60,6 +74,7 @@ export default function Navbar() {
             href="/"
             className="text-xl font-black tracking-tighter"
             style={{ fontFamily: "var(--font-headline, Manrope), sans-serif", color: "#e5e1e4" }}
+            onClick={handleLogoClick}
           >
             GUSTAVOAI.DEV
           </Link>
@@ -74,6 +89,7 @@ export default function Navbar() {
                 href={href}
                 className="transition-colors"
                 style={{ color: accent ? "#4edea3" : "rgba(229,225,228,0.6)" }}
+                onClick={(e) => handleNavLinkClick(e, href)}
                 onMouseEnter={(e) => { if (!accent) (e.currentTarget as HTMLElement).style.color = "#e5e1e4"; }}
                 onMouseLeave={(e) => { if (!accent) (e.currentTarget as HTMLElement).style.color = "rgba(229,225,228,0.6)"; }}
               >
@@ -169,6 +185,7 @@ export default function Navbar() {
                     <a
                       className="flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors"
                       href="#sessions"
+                      onClick={(e) => handleNavLinkClick(e, "#sessions")}
                       style={{ color: "#bbcabf" }}
                       onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#353437"; (e.currentTarget as HTMLElement).style.color = "#e5e1e4"; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "#bbcabf"; }}
@@ -293,7 +310,7 @@ export default function Navbar() {
               <nav className="px-2">
                 <a
                   href="#sessions"
-                  onClick={() => setMobileOpen(false)}
+                  onClick={(e) => handleNavLinkClick(e, "#sessions")}
                   className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-colors"
                   style={{ color: "#bbcabf", fontFamily: "var(--font-headline, Manrope), sans-serif", textDecoration: "none" }}
                   onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#1c1b1d"; }}
@@ -309,7 +326,7 @@ export default function Navbar() {
                   <Link
                     key={label}
                     href={href}
-                    onClick={() => setMobileOpen(false)}
+                    onClick={(e) => handleNavLinkClick(e, href)}
                     className="flex items-center px-4 py-3 rounded-lg text-sm font-semibold transition-colors"
                     style={{ color: accent ? "#4edea3" : "#bbcabf", fontFamily: "var(--font-headline, Manrope), sans-serif" }}
                     onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#1c1b1d"; }}
@@ -344,7 +361,7 @@ export default function Navbar() {
                   <Link
                     key={label}
                     href={href}
-                    onClick={() => setMobileOpen(false)}
+                    onClick={(e) => handleNavLinkClick(e, href)}
                     className="flex items-center px-4 py-3 rounded-lg text-sm font-semibold transition-colors"
                     style={{ color: accent ? "#4edea3" : "#bbcabf", fontFamily: "var(--font-headline, Manrope), sans-serif" }}
                     onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#1c1b1d"; }}
