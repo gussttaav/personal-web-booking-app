@@ -39,6 +39,7 @@ export interface SelectedSlot {
 interface WeeklyCalendarProps {
   durationMinutes: 15 | 60 | 120;
   onSlotSelected:  (slot: SelectedSlot) => void;
+  onSlotFocused?:  (slot: SelectedSlot | null) => void;
   selectedSlot?:   SelectedSlot | null;
 }
 
@@ -85,12 +86,12 @@ function formatWeekHeading(weekStart: Date): string {
 export default function WeeklyCalendar({
   durationMinutes,
   onSlotSelected,
+  onSlotFocused,
   selectedSlot,
 }: WeeklyCalendarProps) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [slotsMap,   setSlotsMap]   = useState<Record<string, DaySlots>>({});
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
-  const [modalSlot,  setModalSlot]  = useState<{ slot: ApiSlot; date: Date } | null>(null);
   const [isMobile,   setIsMobile]   = useState(false);
   const [userTz,     setUserTz]     = useState<string>(SCHEDULE.timezone);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -153,43 +154,40 @@ export default function WeeklyCalendar({
     });
   }, [weekOffset, durationMinutes, userTz]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const buildSlot = useCallback((date: Date, slot: ApiSlot): SelectedSlot => {
+    const tzDiff = userTz !== SCHEDULE.timezone;
+    return {
+      startIso:  slot.start,
+      endIso:    slot.end,
+      label:     tzDiff ? slot.localLabel : slot.label,
+      dateLabel: formatDateLabel(date),
+      timezone:  userTz,
+    };
+  }, [userTz]);
+
   const handleSlotClick = useCallback((date: Date, slot: ApiSlot) => {
     const key = slotKey(date, slot);
     if (isMobile) {
       if (focusedKey === key) {
-        setModalSlot({ slot, date });
+        onSlotSelected(buildSlot(date, slot));
         setFocusedKey(null);
+        onSlotFocused?.(null);
       } else {
         setFocusedKey(key);
+        onSlotFocused?.(buildSlot(date, slot));
       }
     } else {
       setFocusedKey(key);
+      onSlotFocused?.(buildSlot(date, slot));
     }
-  }, [isMobile, focusedKey]);
+  }, [isMobile, focusedKey, buildSlot, onSlotSelected, onSlotFocused]);
 
   const handleSelectOverlay = useCallback((date: Date, slot: ApiSlot, e: React.MouseEvent) => {
     e.stopPropagation();
-    setModalSlot({ slot, date });
+    onSlotSelected(buildSlot(date, slot));
     setFocusedKey(null);
-  }, []);
-
-  const handleModalConfirm = useCallback((note?: string) => {
-    if (!modalSlot) return;
-    const { slot, date } = modalSlot;
-    const tzDiffers     = userTz !== SCHEDULE.timezone;
-    const displayLabel  = tzDiffers ? slot.localLabel : slot.label;
-    onSlotSelected({
-      startIso:  slot.start,
-      endIso:    slot.end,
-      label:     displayLabel,
-      dateLabel: formatDateLabel(date),
-      note,
-      timezone:  userTz,
-    });
-    setModalSlot(null);
-  }, [modalSlot, userTz, onSlotSelected]);
-
-  const handleModalClose = useCallback(() => setModalSlot(null), []);
+    onSlotFocused?.(null);
+  }, [buildSlot, onSlotSelected, onSlotFocused]);
 
   const today    = new Date(); today.setHours(0, 0, 0, 0);
   const maxDate  = new Date(); maxDate.setDate(maxDate.getDate() + SCHEDULE.bookingWindowWeeks * 7);
@@ -414,178 +412,16 @@ export default function WeeklyCalendar({
             className="text-center text-xs mt-3"
             style={{ color: "#86948a" }}
           >
-            Toca el horario seleccionado de nuevo para confirmar
+            Toca el horario de nuevo para continuar
           </p>
         )}
       </div>
-
-      {/* Confirmation modal */}
-      {modalSlot && (
-        <ConfirmModal
-          slot={modalSlot.slot}
-          date={modalSlot.date}
-          userTz={userTz}
-          onConfirm={handleModalConfirm}
-          onClose={handleModalClose}
-        />
-      )}
 
       <style>{`
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
     </>
-  );
-}
-
-// ─── Confirm modal ────────────────────────────────────────────────────────────
-
-function ConfirmModal({
-  slot, date, userTz, onConfirm, onClose,
-}: {
-  slot:      ApiSlot;
-  date:      Date;
-  userTz:    string;
-  onConfirm: (note?: string) => void;
-  onClose:   () => void;
-}) {
-  const [note, setNote]   = useState("");
-  const tzDiffers         = userTz !== SCHEDULE.timezone;
-  const dateLabel         = formatDateLabel(date);
-  const localLabel        = slot.localLabel;
-  const madridLabel       = slot.label;
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
-        position: "fixed", inset: 0, zIndex: 200,
-        background: "rgba(0,0,0,0.75)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: "24px 16px",
-      }}
-    >
-      <div
-        style={{
-          background: "rgba(53,52,55,0.95)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          backdropFilter: "blur(32px)",
-          WebkitBackdropFilter: "blur(32px)",
-          borderRadius: 16, width: "100%", maxWidth: 420,
-          padding: "24px",
-          display: "flex", flexDirection: "column", gap: 18,
-          animation: "fadeUp 0.2s ease both",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
-        }}
-      >
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 10,
-              background: "rgba(78,222,163,0.1)",
-              border: "1px solid rgba(78,222,163,0.2)",
-              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-            }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4edea3" strokeWidth="2" strokeLinecap="round">
-                <rect x="3" y="4" width="18" height="18" rx="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/>
-                <line x1="8" y1="2" x2="8" y2="6"/>
-                <line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
-            </div>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#e5e1e4" }}>{dateLabel}</div>
-              <div style={{ fontSize: 13, color: "#bbcabf" }}>
-                {tzDiffers ? `${localLabel} (tu hora)` : localLabel}
-                {tzDiffers && <span style={{ color: "#86948a", marginLeft: 4 }}>· {madridLabel} Madrid</span>}
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#bbcabf", padding: 4, borderRadius: 6 }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#e5e1e4")}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "#bbcabf")}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-
-        {/* Note input */}
-        <div>
-          <label style={{ fontSize: 12, fontWeight: 500, color: "#bbcabf", display: "block", marginBottom: 6 }}>
-            Motivo de la sesión <span style={{ color: "#86948a", fontWeight: 400 }}>(opcional)</span>
-          </label>
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            maxLength={1000}
-            rows={3}
-            placeholder="Ej: tengo dudas sobre recursividad en Java, preparación de entrevista técnica..."
-            style={{
-              width: "100%", padding: "10px 12px",
-              background: "#201f22",
-              border: "1px solid rgba(255,255,255,0.07)",
-              borderRadius: 8, color: "#e5e1e4",
-              fontFamily: "inherit", fontSize: 13, lineHeight: 1.6,
-              resize: "vertical", outline: "none",
-              transition: "border-color 0.15s",
-              boxSizing: "border-box",
-            }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(78,222,163,0.4)")}
-            onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)")}
-          />
-          <p style={{ fontSize: 11.5, color: "#86948a", marginTop: 5 }}>
-            También puedes enviar los detalles por email después
-          </p>
-        </div>
-
-        {/* Confirm button */}
-        <button
-          onClick={() => onConfirm(note || undefined)}
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-            width: "100%", padding: "13px 20px",
-            background: "linear-gradient(135deg, #4edea3, #10b981)",
-            border: "none", borderRadius: 8,
-            color: "#003824", fontSize: 14, fontWeight: 700,
-            cursor: "pointer", fontFamily: "inherit",
-            transition: "opacity 0.15s, transform 0.1s",
-          }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.9"; (e.currentTarget as HTMLElement).style.transform = "scale(1.01)"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; (e.currentTarget as HTMLElement).style.transform = "scale(1)"; }}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-          Confirmar reserva
-        </button>
-
-        <p style={{ fontSize: 11.5, color: "#86948a", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 5, margin: 0 }}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
-          Recibirás confirmación por correo
-        </p>
-      </div>
-
-      <style>{`
-        @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
-      `}</style>
-    </div>
   );
 }
 

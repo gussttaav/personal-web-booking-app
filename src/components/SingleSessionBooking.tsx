@@ -22,7 +22,6 @@ import BookingLayout from "@/components/booking/BookingLayout";
 import WizardProgress from "@/components/booking/WizardProgress";
 import BookingSidebar from "@/components/booking/BookingSidebar";
 import {
-  ConfirmPanel,
   SESSION_CONFIGS,
   primaryBtnStyle,
   secondaryBtnStyle,
@@ -38,8 +37,8 @@ interface SingleSessionBookingProps {
   onBack:           () => void;
 }
 
-// UX-02: "selected" is new — slot chosen but not yet confirmed
-type Phase = "picking" | "selected" | "booking" | "redirecting" | "success" | "error";
+// "review" = slot chosen, waiting for user to confirm before payment/booking
+type Phase = "picking" | "review" | "booking" | "redirecting" | "success" | "error";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "";
 
@@ -52,13 +51,15 @@ export default function SingleSessionBooking({
 }: SingleSessionBookingProps) {
   const cfg = SESSION_CONFIGS[sessionType];
 
-  const [phase,       setPhase]       = useState<Phase>("picking");
-  const [errorMsg,    setErrorMsg]    = useState("");
-  const [selected,    setSelected]    = useState<SelectedSlot | null>(null);
-  const [meetLink,    setMeetLink]    = useState("");
-  const [cancelToken, setCancelToken] = useState("");
-  const [emailFailed, setEmailFailed] = useState(false);
-  const [userTz,      setUserTz]      = useState<string>("");
+  const [phase,        setPhase]        = useState<Phase>("picking");
+  const [errorMsg,     setErrorMsg]     = useState("");
+  const [selected,     setSelected]     = useState<SelectedSlot | null>(null);
+  const [focusedSlot,  setFocusedSlot]  = useState<SelectedSlot | null>(null);
+  const [note,         setNote]         = useState("");
+  const [meetLink,     setMeetLink]     = useState("");
+  const [cancelToken,  setCancelToken]  = useState("");
+  const [emailFailed,  setEmailFailed]  = useState(false);
+  const [userTz,       setUserTz]       = useState<string>("");
 
   useEffect(() => {
     try {
@@ -69,18 +70,13 @@ export default function SingleSessionBooking({
     } catch { /* ignore */ }
   }, []);
 
-  // UX-02: Step 1 — slot selected
+  // Slot selected → always show review step first
   const handleSlotSelected = useCallback((slot: SelectedSlot) => {
     setSelected(slot);
-    const needsStripe = (sessionType === "session1h" || sessionType === "session2h") && !rescheduleToken;
-    if (needsStripe) {
-      void handleStripeRedirect(slot);
-    } else {
-      setPhase("selected");
-    }
-  }, [sessionType, rescheduleToken]); // eslint-disable-line react-hooks/exhaustive-deps
+    setFocusedSlot(null);
+    setPhase("review");
+  }, []);
 
-  // UX-02: Step 2 — "Confirmar reserva" pressed for free/reschedule flows
   const handleConfirm = useCallback(async () => {
     if (!selected) return;
     setPhase("booking");
@@ -89,7 +85,7 @@ export default function SingleSessionBooking({
         startIso:        selected.startIso,
         endIso:          selected.endIso,
         sessionType:     sessionType === "free15min" ? "free15min" : sessionType,
-        note:            selected.note,
+        note:            note || undefined,
         timezone:        selected.timezone,
         rescheduleToken: rescheduleToken ?? undefined,
       });
@@ -103,7 +99,7 @@ export default function SingleSessionBooking({
       setErrorMsg(friendlyError(status, raw));
       setPhase("error");
     }
-  }, [selected, sessionType, rescheduleToken]);
+  }, [selected, sessionType, rescheduleToken, note]);
 
   async function handleStripeRedirect(slot: SelectedSlot) {
     setPhase("redirecting");
@@ -187,7 +183,7 @@ export default function SingleSessionBooking({
   }
 
   // ── Main booking UI ────────────────────────────────────────────────────────
-  const wizardStep: 1 | 2 | 3 = phase === "selected" ? 3 : 2;
+  const wizardStep: 1 | 2 | 3 = phase === "review" ? 3 : 2;
   const isReschedule = !!rescheduleToken;
 
   return (
@@ -223,23 +219,105 @@ export default function SingleSessionBooking({
                   {phase === "redirecting" ? "Redirigiendo al pago…" : `Reservando ${selected?.dateLabel} a las ${selected?.label}…`}
                 </p>
               </div>
-            ) : phase === "selected" && selected ? (
-              // UX-02: confirm panel for free / reschedule flows
+            ) : phase === "review" && selected ? (
               <div className="p-8">
                 <div style={{ maxWidth: 520, margin: "0 auto" }}>
-                  <ConfirmPanel
-                    slot={selected}
-                    onConfirm={handleConfirm}
-                    onCancel={() => setPhase("picking")}
-                    sessionDuration={cfg.duration}
-                    isReschedule={isReschedule}
-                  />
+                  {/* Date/time header */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(78,222,163,0.1)", border: "1px solid rgba(78,222,163,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4edea3" strokeWidth="2" strokeLinecap="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/>
+                        <line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 16, fontWeight: 600, color: "#e5e1e4" }}>{selected.dateLabel}</div>
+                      <div style={{ fontSize: 14, color: "#bbcabf" }}>{selected.label} · {cfg.duration} · Google Meet</div>
+                    </div>
+                  </div>
+
+                  {/* Session info card */}
+                  <div style={{ background: "#201f22", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "16px 20px", marginBottom: 16 }}>
+                    <div style={{ fontSize: 12, color: "#86948a", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>Sesión</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: "#e5e1e4" }}>{cfg.label}</div>
+                    {cfg.price && !isReschedule && (
+                      <div style={{ fontSize: 14, color: "#4edea3", fontWeight: 600, marginTop: 4 }}>{cfg.price}</div>
+                    )}
+                  </div>
+
+                  {/* Contextual notice */}
+                  {isReschedule ? (
+                    <div style={{ background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)", borderRadius: 10, padding: "12px 16px", marginBottom: 20, display: "flex", alignItems: "center", gap: 8 }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2" strokeLinecap="round">
+                        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                      </svg>
+                      <span style={{ fontSize: 13, color: "#93c5fd" }}>Reprogramación gratuita — no se realiza ningún cobro</span>
+                    </div>
+                  ) : cfg.price ? (
+                    <div style={{ background: "rgba(78,222,163,0.08)", border: "1px solid rgba(78,222,163,0.15)", borderRadius: 10, padding: "12px 16px", marginBottom: 20, display: "flex", alignItems: "center", gap: 8 }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4edea3" strokeWidth="2" strokeLinecap="round">
+                        <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+                      </svg>
+                      <span style={{ fontSize: 13, color: "#4edea3" }}>Serás redirigido a Stripe para completar el pago de {cfg.price}</span>
+                    </div>
+                  ) : null}
+
+                  {/* Note textarea */}
+                  <div style={{ marginBottom: 20 }}>
+                    <label style={{ fontSize: 12, fontWeight: 500, color: "#bbcabf", display: "block", marginBottom: 6 }}>
+                      Motivo de la sesión <span style={{ color: "#86948a", fontWeight: 400 }}>(opcional)</span>
+                    </label>
+                    <textarea
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      maxLength={1000}
+                      rows={3}
+                      placeholder="Ej: tengo dudas sobre recursividad en Java, preparación de entrevista técnica..."
+                      style={{
+                        width: "100%", padding: "10px 12px",
+                        background: "#201f22",
+                        border: "1px solid rgba(255,255,255,0.07)",
+                        borderRadius: 8, color: "#e5e1e4",
+                        fontFamily: "inherit", fontSize: 13, lineHeight: 1.6,
+                        resize: "vertical", outline: "none",
+                        transition: "border-color 0.15s",
+                        boxSizing: "border-box",
+                      }}
+                      onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(78,222,163,0.4)")}
+                      onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)")}
+                    />
+                    <p style={{ fontSize: 11.5, color: "#86948a", marginTop: 5 }}>
+                      También puedes enviar los detalles por email después
+                    </p>
+                  </div>
+
+                  {/* Confirm button */}
+                  <button
+                    onClick={() => {
+                      const needsStripe = (sessionType === "session1h" || sessionType === "session2h") && !rescheduleToken;
+                      if (needsStripe) void handleStripeRedirect(selected);
+                      else void handleConfirm();
+                    }}
+                    style={primaryBtnStyle}
+                  >
+                    {isReschedule ? "Confirmar reprogramación" : cfg.price ? "Confirmar pago" : "Confirmar reserva"}
+                  </button>
+
+                  <p style={{ fontSize: 11.5, color: "#86948a", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 16 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    Recibirás confirmación por correo
+                  </p>
                 </div>
               </div>
             ) : (
               <WeeklyCalendar
                 durationMinutes={cfg.durationMinutes}
                 onSlotSelected={handleSlotSelected}
+                onSlotFocused={setFocusedSlot}
                 selectedSlot={selected}
               />
             )}
@@ -250,67 +328,59 @@ export default function SingleSessionBooking({
             className="p-8 flex flex-col md:flex-row items-center justify-between gap-6"
             style={{ borderTop: "1px solid rgba(255,255,255,0.05)", background: "#1c1b1d" }}
           >
-            <button
-              onClick={onBack}
-              className="flex items-center gap-2 font-semibold transition-colors group"
-              style={{ color: "#bbcabf", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#e5e1e4"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#bbcabf"; }}
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                className="group-hover:-translate-x-1 transition-transform"
-                aria-hidden="true"
-              >
-                <polyline points="15 18 9 12 15 6" />
-              </svg>
-              <span>Cambiar tipo de sesión</span>
-            </button>
-
-            {phase === "selected" && selected && (
+            {phase === "review" ? (
               <button
-                onClick={handleConfirm}
-                className="w-full md:w-auto font-headline font-bold text-lg rounded-xl flex items-center justify-center gap-3 transition-all"
-                style={{
-                  background: "linear-gradient(135deg, #4edea3, #10b981)",
-                  color: "#003824",
-                  padding: "16px 48px",
-                  border: "none",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.boxShadow = "0 0 30px rgba(78,222,163,0.4)";
-                  (e.currentTarget as HTMLElement).style.transform = "scale(1.02)";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.boxShadow = "none";
-                  (e.currentTarget as HTMLElement).style.transform = "scale(1)";
-                }}
+                onClick={() => { setPhase("picking"); setNote(""); setFocusedSlot(selected); }}
+                className="flex items-center gap-2 font-semibold transition-colors group"
+                style={{ color: "#bbcabf", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#e5e1e4"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#bbcabf"; }}
               >
-                Confirmar reserva
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-                  <polyline points="9 18 15 12 9 6" />
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="group-hover:-translate-x-1 transition-transform" aria-hidden="true">
+                  <polyline points="15 18 9 12 15 6" />
                 </svg>
+                <span>Volver atrás</span>
+              </button>
+            ) : (
+              <button
+                onClick={onBack}
+                className="flex items-center gap-2 font-semibold transition-colors group"
+                style={{ color: "#bbcabf", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#e5e1e4"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#bbcabf"; }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="group-hover:-translate-x-1 transition-transform" aria-hidden="true">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+                <span>Cambiar tipo de sesión</span>
               </button>
             )}
 
             {phase === "picking" && (
-              <div
-                className="hidden md:flex items-center gap-2 text-xs"
-                style={{ color: "#86948a" }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-                </svg>
-                Selecciona un horario para continuar
-              </div>
+              focusedSlot ? (
+                <button
+                  onClick={() => handleSlotSelected(focusedSlot)}
+                  className="flex items-center gap-2 font-semibold transition-colors group"
+                  style={{ color: "#4edea3", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#6ee8b4"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#4edea3"; }}
+                >
+                  <span>Continuar</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="group-hover:translate-x-1 transition-transform" aria-hidden="true">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </button>
+              ) : (
+                <div
+                  className="hidden md:flex items-center gap-2 text-xs"
+                  style={{ color: "#86948a" }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  Selecciona un horario para continuar
+                </div>
+              )
             )}
           </div>
         </div>
