@@ -123,7 +123,6 @@ export default function InteractiveShell() {
             alignItems: "center",
             justifyContent: "space-between",
             padding: "18px 24px",
-            borderBottom: "1px solid rgba(255,255,255,0.05)",
             background: "rgba(19,19,21,0.90)",
             backdropFilter: "blur(20px)",
             WebkitBackdropFilter: "blur(20px)",
@@ -195,6 +194,7 @@ export default function InteractiveShell() {
             onCreditsUpdated={updateCredits}
             onExit={router.closePackBooking}
             hideTopBar
+            packTotal={packSession?.packSize ?? undefined}
           />
         </div>
       </div>

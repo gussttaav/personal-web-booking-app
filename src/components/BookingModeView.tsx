@@ -24,11 +24,10 @@ import { friendlyError } from "@/constants/errors";
 import { api, ApiError } from "@/lib/api-client";
 import WeeklyCalendar, { type SelectedSlot } from "@/components/WeeklyCalendar";
 import BookingLayout from "@/components/booking/BookingLayout";
-import WizardProgress from "@/components/booking/WizardProgress";
 import BookingSidebar from "@/components/booking/BookingSidebar";
 import type { StudentInfo } from "@/types";
 
-type BookingPhase = "idle" | "selected" | "confirming" | "success" | "error";
+type BookingPhase = "idle" | "selected" | "confirming" | "error";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "";
 
@@ -38,6 +37,16 @@ interface BookingModeViewProps {
   onCreditsUpdated:  (remaining: number) => void;
   onExit:            () => void;
   hideTopBar?:       boolean;
+  packTotal?:        number | null;
+}
+
+interface SuccessBanner {
+  dateLabel:   string;
+  label:       string;
+  isReschedule: boolean;
+  meetLink:    string;
+  cancelUrl:   string | null;
+  emailFailed: boolean;
 }
 
 export default function BookingModeView({
@@ -46,15 +55,14 @@ export default function BookingModeView({
   onCreditsUpdated,
   onExit,
   // hideTopBar is no longer used — BookingLayout always shows the full nav
+  packTotal,
 }: BookingModeViewProps) {
-  const [phase,       setPhase]       = useState<BookingPhase>("idle");
-  const [remaining,   setRemaining]   = useState(student.credits);
-  const [errMsg,      setErrMsg]      = useState("");
-  const [meetLink,    setMeetLink]    = useState("");
-  const [cancelToken, setCancelToken] = useState("");
-  const [selected,    setSelected]    = useState<SelectedSlot | null>(null);
-  const [emailFailed, setEmailFailed] = useState(false);
-  const [userTz,      setUserTz]      = useState<string>("");
+  const [phase,         setPhase]         = useState<BookingPhase>("idle");
+  const [remaining,     setRemaining]     = useState(student.credits);
+  const [errMsg,        setErrMsg]        = useState("");
+  const [selected,      setSelected]      = useState<SelectedSlot | null>(null);
+  const [successBanner, setSuccessBanner] = useState<SuccessBanner | null>(null);
+  const [userTz,        setUserTz]        = useState<string>("");
 
   useEffect(() => { setRemaining(student.credits); }, [student.credits]);
 
@@ -88,119 +96,99 @@ export default function BookingModeView({
       });
       const newRemaining = isReschedule ? remaining : remaining - 1;
       setRemaining(newRemaining);
-      setMeetLink(data.meetLink);
-      setCancelToken(data.cancelToken);
-      setEmailFailed(data.emailFailed);
-      setPhase("success");
       onCreditsUpdated(newRemaining);
+      if (!isReschedule && newRemaining === 0) {
+        onExit();
+        return;
+      }
+      setSuccessBanner({
+        dateLabel:   selected.dateLabel,
+        label:       selected.label,
+        isReschedule,
+        meetLink:    data.meetLink,
+        cancelUrl:   data.cancelToken ? `${BASE_URL}/cancelar?token=${data.cancelToken}` : null,
+        emailFailed: data.emailFailed,
+      });
+      setPhase("idle");
+      setSelected(null);
     } catch (err) {
       const status = err instanceof ApiError ? err.status : 0;
       const raw    = err instanceof ApiError ? err.message : "Error al registrar la reserva.";
       setErrMsg(friendlyError(status, raw));
       setPhase("error");
     }
-  }, [selected, remaining, rescheduleToken, onCreditsUpdated]);
+  }, [selected, remaining, rescheduleToken, isReschedule, onCreditsUpdated]);
 
-  function bookAnother() {
-    setPhase("idle");
-    setSelected(null);
-    setMeetLink("");
-    setCancelToken("");
-    setEmailFailed(false);
-  }
-
-  const cancelUrl = cancelToken ? `${BASE_URL}/cancelar?token=${cancelToken}` : null;
-
-  // ── Success screen ──────────────────────────────────────────────────────────
-  if (phase === "success") {
-    return (
-      <BookingLayout>
-        <WizardProgress currentStep={3} />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 24px" }}>
-          <div style={{ textAlign: "center", maxWidth: 480, width: "100%" }}>
-            <div style={{ width: 64, height: 64, borderRadius: "50%", margin: "0 auto 20px", background: "rgba(78,222,163,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, color: "#4edea3" }}>✓</div>
-            <h2 style={{ fontSize: 22, fontWeight: 600, color: "#e5e1e4", marginBottom: 6, fontFamily: "var(--font-headline, Manrope), sans-serif" }}>
-              {isReschedule ? "¡Clase reprogramada!" : "¡Clase reservada!"}
-            </h2>
-            <p style={{ fontSize: 14, color: "#bbcabf", marginBottom: 16 }}>{selected?.dateLabel} · {selected?.label}</p>
-
-            {emailFailed ? (
-              <div style={{ background: "rgba(78,222,163,0.08)", border: "1px solid rgba(78,222,163,0.25)", borderRadius: 12, padding: "16px 20px", marginBottom: 20, textAlign: "left" }}>
-                <p style={{ fontSize: 13, fontWeight: 500, color: "#4edea3", marginBottom: 8 }}>⚠️ No pudimos enviarte el email de confirmación</p>
-                <p style={{ fontSize: 12, color: "#bbcabf", marginBottom: 12 }}>Tu clase está reservada. Guarda el enlace de Google Meet ahora:</p>
-                <a href={meetLink} target="_blank" rel="noopener noreferrer" style={{ display: "block", wordBreak: "break-all", fontSize: 13, color: "#4edea3", textDecoration: "underline", marginBottom: 8 }}>{meetLink}</a>
-                {cancelUrl && (
-                  <a href={cancelUrl} style={{ display: "block", fontSize: 12, color: "#bbcabf", marginTop: 4 }}>Cancelar esta reserva</a>
-                )}
-              </div>
-            ) : (
-              <>
-                <p style={{ fontSize: 13, color: "#bbcabf", marginBottom: 8 }}>Recibirás el enlace de Google Meet y la confirmación por email.</p>
-                {cancelUrl && (
-                  <p style={{ fontSize: 12, color: "#86948a", marginBottom: 20 }}>
-                    También puedes{" "}
-                    <a href={cancelUrl} style={{ color: "#bbcabf", textDecoration: "underline" }}>cancelar esta reserva</a>
-                    {" "}directamente.
-                  </p>
-                )}
-              </>
-            )}
-
-            <div style={{ background: "#201f22", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "16px 20px", marginBottom: 20, textAlign: "left" }}>
-              {isReschedule ? (
-                <>
-                  <p style={{ fontSize: 14, fontWeight: 500, color: "#4edea3", marginBottom: 4 }}>Clase reprogramada con éxito</p>
-                  {!emailFailed && <p style={{ fontSize: 12, color: "#bbcabf" }}>Recibirás los nuevos detalles por email.</p>}
-                </>
-              ) : remaining > 0 ? (
-                <>
-                  <p style={{ fontSize: 14, fontWeight: 500, color: "#4edea3", marginBottom: 4 }}>
-                    Te quedan {remaining} clase{remaining !== 1 ? "s" : ""}
-                  </p>
-                  {!emailFailed && <p style={{ fontSize: 12, color: "#bbcabf" }}>Recibirás el enlace de cancelación por email.</p>}
-                </>
-              ) : (
-                <p style={{ fontSize: 14, fontWeight: 500, color: COLORS.warning }}>Has usado todas tus clases del pack</p>
-              )}
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {!isReschedule && remaining > 0 && (
-                <button onClick={bookAnother} style={primaryBtnStyle}>Reservar otra clase</button>
-              )}
-              <button onClick={onExit} style={isReschedule || remaining === 0 ? primaryBtnStyle : secondaryBtnStyle}>
-                {isReschedule ? "Volver al inicio" : remaining > 0 ? "Volver al inicio" : "Comprar otro pack"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </BookingLayout>
-    );
-  }
-
-  // ── Error screen ───────────────────────────────────────────────────────────
-  if (phase === "error") {
-    return (
-      <BookingLayout>
-        <WizardProgress currentStep={2} />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
-          <div style={{ textAlign: "center", maxWidth: 380, width: "100%" }}>
-            <div style={{ width: 56, height: 56, borderRadius: "50%", margin: "0 auto 16px", background: COLORS.errorBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: COLORS.error }}>✕</div>
-            <h3 style={{ fontSize: 18, color: "#e5e1e4", marginBottom: 8, fontFamily: "var(--font-headline, Manrope), sans-serif" }}>Algo salió mal</h3>
-            <Alert variant="error">{errMsg}</Alert>
-            <button onClick={() => setPhase("idle")} style={{ ...primaryBtnStyle, marginTop: 16 }}>Intentar de nuevo</button>
-          </div>
-        </div>
-      </BookingLayout>
-    );
-  }
+  const showModal = (phase === "selected" || phase === "confirming" || phase === "error") && selected;
 
   // ── Main booking UI ────────────────────────────────────────────────────────
-  const wizardStep: 1 | 2 | 3 = phase === "selected" ? 3 : 2;
 
   return (
     <BookingLayout>
-      <WizardProgress currentStep={wizardStep} />
+      {/* ── Success banner ── */}
+      {successBanner && (
+        <div
+          style={{
+            marginBottom: 24,
+            background: "rgba(78,222,163,0.08)",
+            border: "1px solid rgba(78,222,163,0.25)",
+            borderRadius: 12,
+            padding: "16px 20px",
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          <div>
+            <p style={{ fontSize: 14, fontWeight: 600, color: "#4edea3", marginBottom: 4 }}>
+              {successBanner.isReschedule ? "¡Clase reprogramada!" : "¡Clase reservada!"}
+            </p>
+            <p style={{ fontSize: 13, color: "#bbcabf" }}>
+              {successBanner.dateLabel} · {successBanner.label}
+              {!successBanner.isReschedule && remaining > 0 && (
+                <> — te quedan {remaining} clase{remaining !== 1 ? "s" : ""}</>
+              )}
+              {!successBanner.isReschedule && remaining === 0 && (
+                <> — <span style={{ color: COLORS.warning }}>has usado todas tus clases</span></>
+              )}
+            </p>
+            {successBanner.emailFailed && successBanner.meetLink && (
+              <>
+                <p style={{ fontSize: 12, color: "#bbcabf", marginTop: 6 }}>
+                  No pudimos enviarte el email. Guarda el enlace de Google Meet:
+                </p>
+                <a
+                  href={successBanner.meetLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontSize: 12, color: "#4edea3", textDecoration: "underline", display: "block", marginTop: 2 }}
+                >
+                  {successBanner.meetLink}
+                </a>
+              </>
+            )}
+            {successBanner.cancelUrl && (
+              <a
+                href={successBanner.cancelUrl}
+                style={{ fontSize: 12, color: "#86948a", display: "block", marginTop: 4 }}
+              >
+                Cancelar esta reserva
+              </a>
+            )}
+          </div>
+          <button
+            onClick={() => setSuccessBanner(null)}
+            aria-label="Cerrar"
+            style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: "#86948a", flexShrink: 0, fontSize: 20, lineHeight: 1, padding: 2,
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* ── Sidebar ── */}
@@ -209,12 +197,12 @@ export default function BookingModeView({
           sessionName="Sesión Estratégica"
           duration="60 minutos"
           packRemaining={remaining}
-          packTotal={Math.max(remaining, student.credits)}
+          packTotal={packTotal ?? remaining}
           isReschedule={isReschedule}
           userTz={userTz}
         />
 
-        {/* ── Calendar / confirm area ── */}
+        {/* ── Calendar area ── */}
         <div
           className="lg:col-span-9 rounded-xl overflow-hidden flex flex-col"
           style={{
@@ -223,43 +211,12 @@ export default function BookingModeView({
             boxShadow: "0 20px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05)",
           }}
         >
-          {/* Calendar content */}
           <div className="flex-1">
-            {phase === "confirming" ? (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "80px 24px",
-                  gap: 12,
-                }}
-              >
-                <Spinner />
-                <p style={{ fontSize: 13, color: "#bbcabf" }}>
-                  Reservando {selected?.dateLabel} a las {selected?.label}…
-                </p>
-              </div>
-            ) : phase === "selected" && selected ? (
-              <div className="p-8">
-                <div style={{ maxWidth: 520, margin: "0 auto" }}>
-                  <ConfirmPanel
-                    slot={selected}
-                    onConfirm={handleConfirm}
-                    onCancel={() => setPhase("idle")}
-                    packInfo={{ remaining }}
-                    isReschedule={isReschedule}
-                  />
-                </div>
-              </div>
-            ) : (
-              <WeeklyCalendar
-                durationMinutes={60}
-                onSlotSelected={handleSlotSelected}
-                selectedSlot={selected}
-              />
-            )}
+            <WeeklyCalendar
+              durationMinutes={60}
+              onSlotSelected={handleSlotSelected}
+              selectedSlot={selected}
+            />
           </div>
 
           {/* ── Actions bar ── */}
@@ -290,48 +247,103 @@ export default function BookingModeView({
               <span>Cambiar tipo de sesión</span>
             </button>
 
-            {phase === "selected" && selected && (
-              <button
-                onClick={handleConfirm}
-                className="w-full md:w-auto font-headline font-bold text-lg rounded-xl flex items-center justify-center gap-3 transition-all"
-                style={{
-                  background: "linear-gradient(135deg, #4edea3, #10b981)",
-                  color: "#003824",
-                  padding: "16px 48px",
-                  border: "none",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.boxShadow = "0 0 30px rgba(78,222,163,0.4)";
-                  (e.currentTarget as HTMLElement).style.transform = "scale(1.02)";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.boxShadow = "none";
-                  (e.currentTarget as HTMLElement).style.transform = "scale(1)";
-                }}
-              >
-                Confirmar reserva
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              </button>
-            )}
-
-            {phase === "idle" && (
-              <div
-                className="hidden md:flex items-center gap-2 text-xs"
-                style={{ color: "#86948a" }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-                </svg>
-                Selecciona un horario para continuar
-              </div>
-            )}
           </div>
         </div>
       </div>
+
+      {/* ── Confirmation modal ── */}
+      {showModal && (
+        <>
+          {/* Backdrop */}
+          <div
+            onClick={() => { if (phase !== "confirming") { setPhase("idle"); } }}
+            style={{
+              position: "fixed", inset: 0, zIndex: 200,
+              background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)",
+              WebkitBackdropFilter: "blur(4px)",
+            }}
+            aria-hidden="true"
+          />
+          {/* Modal card */}
+          <div
+            style={{
+              position: "fixed", inset: 0, zIndex: 201,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              padding: "24px 16px", pointerEvents: "none",
+            }}
+          >
+            <div style={{ width: "100%", maxWidth: 520, pointerEvents: "auto" }}>
+              {phase === "confirming" ? (
+                <div
+                  style={{
+                    background: "#201f22",
+                    border: "1px solid rgba(255,255,255,0.07)",
+                    borderRadius: 14,
+                    padding: 32,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 12,
+                  }}
+                >
+                  <Spinner />
+                  <p style={{ fontSize: 13, color: "#bbcabf" }}>
+                    Reservando {selected.dateLabel} a las {selected.label}…
+                  </p>
+                </div>
+              ) : phase === "error" ? (
+                <div
+                  style={{
+                    background: "#201f22",
+                    border: "1px solid rgba(255,255,255,0.07)",
+                    borderRadius: 14,
+                    padding: 24,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 16,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div
+                      style={{
+                        width: 36, height: 36, borderRadius: "50%",
+                        background: COLORS.errorBg,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 16, color: COLORS.error, flexShrink: 0,
+                      }}
+                    >
+                      ✕
+                    </div>
+                    <h3
+                      style={{
+                        fontSize: 16, color: "#e5e1e4",
+                        fontFamily: "var(--font-headline, Manrope), sans-serif",
+                      }}
+                    >
+                      Algo salió mal
+                    </h3>
+                  </div>
+                  <Alert variant="error">{errMsg}</Alert>
+                  <button onClick={() => setPhase("selected")} style={primaryBtnStyle}>
+                    Intentar de nuevo
+                  </button>
+                  <button onClick={() => setPhase("idle")} style={secondaryBtnStyle}>
+                    Elegir otro horario
+                  </button>
+                </div>
+              ) : (
+                <ConfirmPanel
+                  slot={selected}
+                  onConfirm={handleConfirm}
+                  onCancel={() => setPhase("idle")}
+                  packInfo={{ remaining }}
+                  isReschedule={isReschedule}
+                />
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </BookingLayout>
   );
 }
