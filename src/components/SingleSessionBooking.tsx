@@ -82,7 +82,7 @@ export default function SingleSessionBooking({
   const [selected,     setSelected]     = useState<SelectedSlot | null>(supportsPreSelect ? initialSlot! : null);
   const [focusedSlot,  setFocusedSlot]  = useState<SelectedSlot | null>(null);
   const [note,         setNote]         = useState("");
-  const [meetLink,     setMeetLink]     = useState("");
+  const [sessionUrl,   setSessionUrl]   = useState("");
   const [cancelToken,  setCancelToken]  = useState("");
   const [emailFailed,  setEmailFailed]  = useState(false);
   const [userTz,       setUserTz]       = useState<string>("");
@@ -115,7 +115,7 @@ export default function SingleSessionBooking({
         timezone:        selected.timezone,
         rescheduleToken: rescheduleToken ?? undefined,
       });
-      setMeetLink(data.meetLink);
+      setSessionUrl(data.cancelToken ? `${BASE_URL}/sesion/${data.cancelToken}` : "");
       setCancelToken(data.cancelToken);
       setEmailFailed(data.emailFailed);
       setPhase("success");
@@ -163,8 +163,8 @@ export default function SingleSessionBooking({
             {emailFailed ? (
               <div style={{ background: "rgba(78,222,163,0.08)", border: "1px solid rgba(78,222,163,0.25)", borderRadius: 12, padding: "16px 20px", marginBottom: 20, textAlign: "left" }}>
                 <p style={{ fontSize: 13, fontWeight: 500, color: "#4edea3", marginBottom: 8 }}>⚠️ No pudimos enviarte el email de confirmación</p>
-                <p style={{ fontSize: 12, color: "#bbcabf", marginBottom: 12 }}>Tu encuentro está reservado. Guarda el enlace de Google Meet ahora:</p>
-                <a href={meetLink} target="_blank" rel="noopener noreferrer" style={{ display: "block", wordBreak: "break-all", fontSize: 13, color: "#4edea3", textDecoration: "underline", marginBottom: 8 }}>{meetLink}</a>
+                <p style={{ fontSize: 12, color: "#bbcabf", marginBottom: 12 }}>Tu encuentro está reservado. Accede a tu sesión aquí:</p>
+                <a href={sessionUrl} style={{ display: "block", fontSize: 13, color: "#4edea3", textDecoration: "underline", marginBottom: 8 }}>Unirse a la sesión →</a>
                 {cancelUrl && (
                   <a href={cancelUrl} style={{ display: "block", fontSize: 12, color: "#bbcabf", marginTop: 4 }}>Cancelar esta reserva</a>
                 )}
@@ -174,7 +174,7 @@ export default function SingleSessionBooking({
               </div>
             ) : (
               <>
-                <p style={{ fontSize: 13, color: "#bbcabf", marginBottom: 8 }}>Recibirás el enlace de Google Meet y la confirmación por email.</p>
+                <p style={{ fontSize: 13, color: "#bbcabf", marginBottom: 8 }}>Recibirás el enlace de la sesión y la confirmación por email.</p>
                 {cancelUrl && (
                   <p style={{ fontSize: 12, color: "#86948a", marginBottom: 20 }}>
                     También puedes{" "}
@@ -478,7 +478,7 @@ export default function SingleSessionBooking({
                       </svg>
                       <span>Plataforma</span>
                     </div>
-                    <span style={{ color: "#e5e1e4" }}>Google Meet</span>
+                    <span style={{ color: "#e5e1e4" }}>Zoom (en la app)</span>
                   </div>
                 </div>
 

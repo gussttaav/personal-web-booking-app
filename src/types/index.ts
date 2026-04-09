@@ -27,15 +27,17 @@ export interface ApiError {
  *
  * QUAL-03 fix: the previous definition had { ok: true; remaining: number }
  * which did not match what the route actually returns. The route returns
- * eventId, meetLink, cancelToken, and emailFailed — remaining is not
- * included (the component does a separate /api/credits fetch for that).
+ * eventId, zoomSessionName, zoomPasscode, cancelToken, and emailFailed —
+ * remaining is not included (the component does a separate /api/credits
+ * fetch for that).
  */
 export interface BookResponse {
-  ok: true;
-  eventId: string;
-  meetLink: string;
-  cancelToken: string;
-  emailFailed: boolean;
+  ok:              true;
+  eventId:         string;
+  zoomSessionName: string;
+  zoomPasscode:    string;
+  cancelToken:     string;
+  emailFailed:     boolean;
 }
 
 export interface CreditsResponse {

@@ -43,12 +43,12 @@ interface BookingModeViewProps {
 }
 
 interface SuccessBanner {
-  dateLabel:   string;
-  label:       string;
+  dateLabel:    string;
+  label:        string;
   isReschedule: boolean;
-  meetLink:    string;
-  cancelUrl:   string | null;
-  emailFailed: boolean;
+  sessionUrl:   string;
+  cancelUrl:    string | null;
+  emailFailed:  boolean;
 }
 
 export default function BookingModeView({
@@ -108,7 +108,7 @@ export default function BookingModeView({
         dateLabel:   selected.dateLabel,
         label:       selected.label,
         isReschedule,
-        meetLink:    data.meetLink,
+        sessionUrl:  data.cancelToken ? `${BASE_URL}/sesion/${data.cancelToken}` : "",
         cancelUrl:   data.cancelToken ? `${BASE_URL}/cancelar?token=${data.cancelToken}` : null,
         emailFailed: data.emailFailed,
       });
@@ -156,18 +156,16 @@ export default function BookingModeView({
                 <> — <span style={{ color: COLORS.warning }}>has usado todas tus clases</span></>
               )}
             </p>
-            {successBanner.emailFailed && successBanner.meetLink && (
+            {successBanner.emailFailed && successBanner.sessionUrl && (
               <>
                 <p style={{ fontSize: 12, color: "#bbcabf", marginTop: 6 }}>
-                  No pudimos enviarte el email. Guarda el enlace de Google Meet:
+                  No pudimos enviarte el email. Accede a tu sesión aquí:
                 </p>
                 <a
-                  href={successBanner.meetLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href={successBanner.sessionUrl}
                   style={{ fontSize: 12, color: "#4edea3", textDecoration: "underline", display: "block", marginTop: 2 }}
                 >
-                  {successBanner.meetLink}
+                  Unirse a la sesión →
                 </a>
               </>
             )}

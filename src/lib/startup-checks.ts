@@ -8,9 +8,8 @@
  * Only truly required variables are listed here — ones whose absence causes
  * an immediate hard failure (auth broken, payments broken, calendar broken).
  * Optional variables with in-code fallbacks are intentionally excluded:
- *   - RESEND_FROM    → falls back to "Gustavo Torres <onboarding@resend.dev>"
- *   - NOTIFY_EMAIL   → admin notifications are skipped when absent
- *   - GOOGLE_MEET_URL → createCalendarEvent falls back to empty string
+ *   - RESEND_FROM  → falls back to "Gustavo Torres <onboarding@resend.dev>"
+ *   - NOTIFY_EMAIL → admin notifications are skipped when absent
  */
 
 const REQUIRED_ENV_VARS = [
@@ -41,10 +40,16 @@ const REQUIRED_ENV_VARS = [
   // Resend (RESEND_FROM and NOTIFY_EMAIL are optional — see module comment)
   "RESEND_API_KEY",
 
+  // Zoom Video SDK
+  "ZOOM_VIDEO_SDK_KEY",
+  "ZOOM_VIDEO_SDK_SECRET",
+
   // App
   "NEXT_PUBLIC_BASE_URL",
   "CANCEL_SECRET",
   "GEMINI_API_KEY",
+  "TUTOR_EMAIL",
+  "INTERNAL_SECRET",
 ] as const;
 
 export function validateEnv(): void {

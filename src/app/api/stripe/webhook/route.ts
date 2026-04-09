@@ -18,6 +18,7 @@ import { addOrUpdateStudent } from "@/lib/kv";
 import { getAvailableSlots, createCalendarEvent, createCancellationToken } from "@/lib/calendar";
 import { sendConfirmationEmail, sendNewBookingNotificationEmail } from "@/lib/email";
 import { log } from "@/lib/logger";
+import { getSessionDurationWithGrace } from "@/lib/zoom";
 
 const SINGLE_SESSION_IDEMPOTENCY_TTL = 7 * 24 * 60 * 60;
 const FAILED_BOOKING_TTL             = 30 * 24 * 60 * 60;
@@ -181,9 +182,9 @@ export async function POST(req: NextRequest) {
       const sessionType  = duration === "1h" ? "session1h" : "session2h";
 
       // Create calendar event with retry + dead-letter (PAY-03)
-      let eventId:    string;
-      let meetLink:   string;
-      let cancelToken: string;
+      let eventId:         string;
+      let zoomSessionName: string;
+      let cancelToken:     string;
 
       try {
         const result = await withRetry(
@@ -192,12 +193,13 @@ export async function POST(req: NextRequest) {
             description: `Alumno: ${name} (${email})\nTipo: ${sessionLabel}\ngustavoai.dev`,
             startIso,
             endIso,
+            sessionType,
           }),
           3,
           "createCalendarEvent"
         );
-        eventId  = result.eventId;
-        meetLink = result.meetLink;
+        eventId         = result.eventId;
+        zoomSessionName = result.zoomSessionName;
         cancelToken = await createCancellationToken({ eventId, email, name, sessionType, startsAt: startIso, endsAt: endIso });
       } catch (err) {
         log("error", "Calendar event creation failed after retries", { service: "webhook", email, startIso, stripeSessionId, error: String(err) });
@@ -207,10 +209,31 @@ export async function POST(req: NextRequest) {
 
       await kv.set(idempotencyKey, { processedAt: new Date().toISOString() }, { ex: SINGLE_SESSION_IDEMPOTENCY_TTL });
 
+      const joinUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/sesion/${cancelToken}`;
+
+      // Schedule auto-termination of the Zoom session after durationWithGrace.
+      // TODO: replace with Upstash QStash for production reliability —
+      // setTimeout inside a serverless function may not fire if the process
+      // is recycled before the timer elapses.
+      const delayMs = getSessionDurationWithGrace(sessionType) * 60 * 1_000;
+      void (async () => {
+        await new Promise(r => setTimeout(r, delayMs));
+        await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/zoom/end`, {
+          method:  "POST",
+          headers: {
+            "X-Internal-Secret": process.env.INTERNAL_SECRET!,
+            "Content-Type":      "application/json",
+          },
+          body: JSON.stringify({ eventId }),
+        }).catch((e: unknown) =>
+          log("error", "Auto-terminate fetch failed", { service: "webhook", eventId, zoomSessionName, error: String(e) })
+        );
+      })();
+
       try {
         await Promise.all([
-          sendConfirmationEmail({ to: email, studentName: name, sessionLabel, startIso, endIso, meetLink, cancelToken, note: null, studentTz: null, sessionType }),
-          sendNewBookingNotificationEmail({ studentEmail: email, studentName: name, sessionLabel, startIso, endIso, meetLink, note: null }),
+          sendConfirmationEmail({ to: email, studentName: name, sessionLabel, startIso, endIso, joinUrl, cancelToken, note: null, studentTz: null, sessionType }),
+          sendNewBookingNotificationEmail({ studentEmail: email, studentName: name, sessionLabel, startIso, endIso, joinUrl, note: null }),
         ]);
       } catch (emailErr) {
         log("error", "Email send failed after booking", { service: "webhook", email, stripeSessionId, error: String(emailErr) });

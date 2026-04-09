@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     } = await import("@/lib/calendar");
 
     const oldBooking = await verifyCancellationToken(rescheduleToken);
-    
+
     // 1. Strict Validation
     if (!oldBooking) {
       return NextResponse.json({ error: "El enlace de reprogramación no es válido o ya ha sido usado." }, { status: 400 });
@@ -69,11 +69,11 @@ export async function POST(req: NextRequest) {
     if (!consumed) {
       return NextResponse.json({ error: "El enlace de reprogramación ya ha sido usado." }, { status: 400 });
     }
-    
+
     consumedToken = true;
 
     try { await deleteCalendarEvent(oldBooking.record.eventId); } catch {}
-    
+
     if (oldBooking.record.sessionType === "pack") {
       const { restoreCredit } = await import("@/lib/kv");
       await restoreCredit(email);
@@ -102,8 +102,9 @@ export async function POST(req: NextRequest) {
   }
 
   const sessionLabel = SESSION_LABELS[sessionType];
-  let eventId:  string;
-  let meetLink: string;
+  let eventId:         string;
+  let zoomSessionName: string;
+  let zoomPasscode:    string;
 
   try {
     const result = await createCalendarEvent({
@@ -116,12 +117,14 @@ export async function POST(req: NextRequest) {
       ].filter(Boolean).join("\n"),
       startIso,
       endIso,
+      sessionType,
     });
-    eventId  = result.eventId;
-    meetLink = result.meetLink;
+    eventId         = result.eventId;
+    zoomSessionName = result.zoomSessionName;
+    zoomPasscode    = result.zoomPasscode;
   } catch (err) {
     log("error", "Calendar event creation failed", { service: "book", email, startIso, error: String(err) });
-    
+
     if (sessionType === "pack") {
       const { restoreCredit } = await import("@/lib/kv");
       await restoreCredit(email);
@@ -138,6 +141,8 @@ export async function POST(req: NextRequest) {
   const cancelToken = await createCancellationToken({
     eventId, email, name, sessionType, startsAt: startIso, endsAt: endIso,
   });
+
+  const joinUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/sesion/${cancelToken}`;
 
   async function sendWithRetry(fn: () => Promise<void>, label: string): Promise<boolean> {
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -157,18 +162,18 @@ export async function POST(req: NextRequest) {
     sendWithRetry(
       () => sendConfirmationEmail({
         to: email, studentName: name, sessionLabel, startIso, endIso,
-        meetLink, cancelToken, note: note ?? null, studentTz: timezone ?? null, sessionType,
+        joinUrl, cancelToken, note: note ?? null, studentTz: timezone ?? null, sessionType,
       }),
       "confirmation email"
     ),
     sendWithRetry(
       () => sendNewBookingNotificationEmail({
         studentEmail: email, studentName: name, sessionLabel,
-        startIso, endIso, meetLink, note: note ?? null,
+        startIso, endIso, joinUrl, note: note ?? null,
       }),
       "notification email"
     ),
   ]);
 
-  return NextResponse.json({ ok: true, eventId, meetLink, cancelToken, emailFailed: !confirmSent });
+  return NextResponse.json({ ok: true, eventId, zoomSessionName, zoomPasscode, cancelToken, emailFailed: !confirmSent });
 }

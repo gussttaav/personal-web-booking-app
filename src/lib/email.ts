@@ -112,7 +112,7 @@ export async function sendConfirmationEmail(params: {
   sessionLabel: string;
   startIso: string;
   endIso: string;
-  meetLink: string;
+  joinUrl: string;
   cancelToken: string;
   note: string | null;
   studentTz: string | null;
@@ -122,7 +122,7 @@ export async function sendConfirmationEmail(params: {
   const safeName         = escapeHtml(params.studentName);
   const safeSessionLabel = escapeHtml(params.sessionLabel);
   const safeNote         = params.note ? escapeHtml(params.note) : null;
-  // meetLink, cancelToken, and URLs are system-generated — not user input.
+  // joinUrl, cancelToken, and URLs are system-generated — not user input.
 
   const tz         = params.studentTz ?? ADMIN_TZ;
   const cancelUrl  = `${BASE_URL}/cancelar?token=${params.cancelToken}`;
@@ -136,8 +136,8 @@ export async function sendConfirmationEmail(params: {
     title:       `${params.sessionLabel} con Gustavo Torres`,
     startIso:    params.startIso,
     endIso:      params.endIso,
-    description: `Enlace Google Meet: ${params.meetLink}\n\nClase con Gustavo Torres Guerrero — gustavoai.dev`,
-    location:    params.meetLink,
+    description: `Enlace de sesión: ${params.joinUrl}\n\nClase con Gustavo Torres Guerrero — gustavoai.dev`,
+    location:    params.joinUrl,
   });
 
   await send({
@@ -158,9 +158,9 @@ export async function sendConfirmationEmail(params: {
         <div class="label">Hora</div>
         <div class="value">${startLabel} – ${endLabel}${tzNote}</div>
 
-        <div class="label">Enlace de Google Meet</div>
+        <div class="label">Enlace de la sesión</div>
         <div class="value" style="margin-bottom:8px">
-          <code style="color:#3ddc84;font-size:13px">${params.meetLink}</code>
+          <a class="meet-btn" href="${params.joinUrl}">Unirse a la sesión →</a>
         </div>
 
         ${safeNote ? `
@@ -271,7 +271,7 @@ export async function sendCancellationNotificationEmail(params: {
 export async function sendNewBookingNotificationEmail(params: {
   studentEmail: string; studentName: string;
   sessionLabel: string; startIso: string; endIso: string;
-  meetLink: string; note: string | null;
+  joinUrl: string; note: string | null;
 }): Promise<void> {
   const notifyEmail = process.env.NOTIFY_EMAIL;
   if (!notifyEmail) return;
@@ -303,7 +303,7 @@ export async function sendNewBookingNotificationEmail(params: {
         <div class="label">Motivo indicado por el alumno</div>
         <div class="note-box"><p>${safeNote}</p></div>` : ""}
         <div style="margin-top:8px">
-          <a class="meet-btn" href="${params.meetLink}">Abrir Google Meet →</a>
+          <a class="meet-btn" href="${params.joinUrl}">Unirse a la sesión →</a>
         </div>
       </div></div></body></html>
     `,

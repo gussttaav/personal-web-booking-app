@@ -49,6 +49,8 @@ import { toZonedTime, fromZonedTime, format } from "date-fns-tz";
 import { kv } from "@/lib/redis";
 import crypto from "crypto";
 import { SCHEDULE, DAY_SCHEDULES, dayStartHour } from "@/lib/booking-config";
+import { generateZoomSessionCredentials, getSessionDurationWithGrace } from "@/lib/zoom";
+import type { ZoomSessionRecord } from "@/lib/zoom";
 
 export { SCHEDULE };
 
@@ -222,12 +224,12 @@ export async function getAvailableSlots(
 }
 
 export async function createCalendarEvent(params: {
-  summary:     string;
-  description: string;
-  startIso:    string;
-  endIso:      string;
-}): Promise<{ eventId: string; meetLink: string }> {
-  const meetLink = process.env.GOOGLE_MEET_URL ?? "";
+  summary:      string;
+  description:  string;
+  startIso:     string;
+  endIso:       string;
+  sessionType?: string;
+}): Promise<{ eventId: string; zoomSessionName: string; zoomPasscode: string }> {
   const calendar = getCalendar();
 
   const event = await calendar.events.insert({
@@ -235,15 +237,39 @@ export async function createCalendarEvent(params: {
     sendUpdates: "none",
     requestBody: {
       summary:     params.summary,
-      description: meetLink ? `${params.description}\n\nGoogle Meet: ${meetLink}` : params.description,
-      location:    meetLink || undefined,
+      description: params.description,
       start: { dateTime: params.startIso, timeZone: TZ },
       end:   { dateTime: params.endIso,   timeZone: TZ },
       reminders: { useDefault: false, overrides: [{ method: "email", minutes: 1440 }, { method: "popup", minutes: 30 }] },
     },
   });
 
-  return { eventId: event.data.id!, meetLink };
+  const eventId        = event.data.id!;
+  const durationMinutes = Math.round(
+    (new Date(params.endIso).getTime() - new Date(params.startIso).getTime()) / 60_000
+  );
+  // Sanitise: remove characters that can cause issues in Zoom session names
+  const safeIso     = params.startIso.replace(/[:.]/g, "-");
+  const sessionName = `session-${safeIso}-${crypto.randomUUID().slice(0, 8)}`;
+  const sessionType    = params.sessionType ?? "unknown";
+
+  const { sessionId, sessionName: zoomSessionName, sessionPasscode } =
+    generateZoomSessionCredentials({ sessionName });
+
+  const durationWithGrace = getSessionDurationWithGrace(sessionType);
+  const zoomRecord: ZoomSessionRecord = {
+    sessionId,
+    sessionName:     zoomSessionName,
+    sessionPasscode,
+    startIso:        params.startIso,
+    durationMinutes,
+    sessionType,
+  };
+  await kv.set(`zoom:session:${eventId}`, zoomRecord, {
+    ex: durationWithGrace * 60 + 86_400,
+  });
+
+  return { eventId, zoomSessionName, zoomPasscode: sessionPasscode };
 }
 
 export async function deleteCalendarEvent(eventId: string): Promise<void> {

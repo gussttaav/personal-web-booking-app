@@ -12,8 +12,8 @@
  * schemas module) so callers can use the typed client consistently.
  *
  * QUAL-03 fix: BookResponse now reflects what /api/book actually returns
- * (eventId, meetLink, cancelToken, emailFailed) — the old definition had
- * { ok: true; remaining: number } which was incorrect.
+ * (eventId, zoomSessionName, zoomPasscode, cancelToken, emailFailed) — the old
+ * definition had { ok: true; remaining: number } which was incorrect.
  */
 
 import type { BookResponse, CheckoutResponse, CreditsResponse, PackSize } from "@/types";
