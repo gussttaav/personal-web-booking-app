@@ -8,7 +8,9 @@
 import dynamic from "next/dynamic";
 import type { ZoomRoomInnerProps } from "./ZoomRoomSession";
 
-const ZoomRoom = dynamic<ZoomRoomInnerProps>(
+export type ZoomRoomProps = ZoomRoomInnerProps;
+
+const ZoomRoom = dynamic<ZoomRoomProps>(
   () => import("./ZoomRoomSession"),
   {
     ssr: false,

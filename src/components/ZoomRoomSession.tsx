@@ -35,6 +35,8 @@ export interface TokenResponse {
 export interface ZoomRoomInnerProps {
   eventId: string;
   userName: string;
+  selectedMicId?: string;
+  selectedCameraId?: string;
 }
 
 type RoomState = "loading" | "ready" | "joining" | "connected" | "ended" | "error";
@@ -112,7 +114,7 @@ async function detachRemoteVideo(stream: any, vpc: HTMLElement, userId: number) 
 
 // ─── ZoomRoomInner ─────────────────────────────────────────────────────────────
 
-export default function ZoomRoomInner({ eventId, userName }: ZoomRoomInnerProps) {
+export default function ZoomRoomInner({ eventId, userName, selectedMicId, selectedCameraId }: ZoomRoomInnerProps) {
   const [state, setState] = useState<RoomState>("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const [countdown, setCountdown] = useState("--:--");
@@ -223,12 +225,12 @@ export default function ZoomRoomInner({ eventId, userName }: ZoomRoomInnerProps)
 
       // ── Start audio & video ──
       try {
-        await stream.startAudio();
+        await stream.startAudio(selectedMicId ? { microphoneId: selectedMicId } : undefined);
       } catch {
         /* mic permission denied is non-fatal */
       }
 
-      const videoResult = await stream.startVideo();
+      const videoResult = await stream.startVideo(selectedCameraId ? { cameraId: selectedCameraId } : undefined);
       if (videoResult instanceof Error) {
         console.warn("[ZoomRoom] startVideo warning:", videoResult.message);
         // Continue — camera may have been denied but session is usable
@@ -343,7 +345,7 @@ export default function ZoomRoomInner({ eventId, userName }: ZoomRoomInnerProps)
       setErrorMsg(msg || "Error al unirse a la sesión");
       setState("error");
     }
-  }, [userName, eventId]);
+  }, [userName, eventId, selectedMicId, selectedCameraId]);
 
   // ── Leave (explicit user action ONLY — never in effect cleanup) ────────────
   const handleLeave = useCallback(async () => {

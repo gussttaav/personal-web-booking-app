@@ -1,18 +1,24 @@
 /**
- * /sesion/[token] — Zoom session room
+ * /sesion/[token] — Pre-join setup + Zoom session room
  *
- * Server component. Uses the cancellation/booking token to look up the
- * booking record and render ZoomRoom for the authenticated student.
+ * Server component. Verifies the booking token, gates on authentication,
+ * and renders the PreJoinSetup component which handles device selection
+ * before the Zoom Video SDK session starts.
  *
- * Access control: if the token is invalid or already used the visitor is
- * redirected to the homepage. The ZoomRoom component makes a subsequent
- * fetch to /api/zoom/token which independently verifies authentication.
+ * Access control:
+ *  - Invalid/used token → redirect to homepage.
+ *  - Valid token, not signed in → Google sign-in prompt with callbackUrl preserving the token.
+ *  - Valid token, signed in → PreJoinSetup (device preview + "Entrar al aula").
  */
 
 import { redirect } from "next/navigation";
 import { toZonedTime, format } from "date-fns-tz";
 import { verifyCancellationToken } from "@/lib/calendar";
-import ZoomRoom from "@/components/ZoomRoom";
+import { auth } from "@/auth";
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
+import PreJoinSetup from "@/components/PreJoinSetup";
 
 const SESSION_LABELS: Record<string, string> = {
   free15min: "Encuentro inicial gratuito · 15 min",
@@ -44,37 +50,40 @@ export default async function SesionPage({
   const sessionLabel = SESSION_LABELS[record.sessionType] ?? record.sessionType;
   const timeLabel    = formatSessionTime(record.startsAt);
 
-  return (
-    <main
-      className="flex flex-col h-screen"
-      style={{ background: "#0d0f10" }}
-    >
-      {/* ── Session info bar ── */}
-      <header
-        className="shrink-0 flex items-center justify-between px-5 py-3"
-        style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}
-      >
-        <div>
-          <p className="text-sm font-medium" style={{ color: "#e5e1e4" }}>
-            {sessionLabel}
-          </p>
-          <p className="text-xs" style={{ color: "#86948a" }}>
-            {timeLabel} (hora de Madrid)
-          </p>
-        </div>
-        <a
-          href="/"
-          className="text-xs"
-          style={{ color: "#4edea3", textDecoration: "none" }}
-        >
-          gustavoai.dev
-        </a>
-      </header>
-
-      {/* ── Video room ── */}
-      <div className="flex-1 min-h-0">
-        <ZoomRoom eventId={record.eventId} userName={record.name} />
+  // ── Auth gate ──────────────────────────────────────────────────────────────
+  const session = await auth();
+  if (!session?.user?.email) {
+    return (
+      <div className="flex flex-col min-h-screen bg-background">
+        <Navbar />
+        <main className="flex-1 flex items-center justify-center px-6">
+          <div className="flex flex-col items-center gap-4 text-center">
+            <p className="text-on-surface-variant">
+              Inicia sesión para acceder a tu sesión.
+            </p>
+            <GoogleSignInButton
+              callbackUrl={`/sesion/${token}`}
+              label="Continuar con Google"
+              fullWidth={false}
+            />
+          </div>
+        </main>
+        <Footer />
       </div>
-    </main>
+    );
+  }
+
+  // ── Authenticated ──────────────────────────────────────────────────────────
+  return (
+    <div className="flex flex-col min-h-screen bg-background">
+      <Navbar />
+      <PreJoinSetup
+        eventId={record.eventId}
+        userName={record.name}
+        sessionLabel={sessionLabel}
+        timeLabel={timeLabel}
+      />
+      <Footer />
+    </div>
   );
 }
