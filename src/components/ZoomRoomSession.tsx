@@ -181,6 +181,7 @@ export default function ZoomRoomInner({
   const [remoteUsers, setRemoteUsers] = useState<
     Array<{ userId: number; displayName: string }>
   >([]);
+  const [isSharingScreen, setIsSharingScreen] = useState(false);
 
   const tokenRef       = useRef<TokenResponse | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -203,6 +204,9 @@ export default function ZoomRoomInner({
   // ── Mount divs — ALWAYS in the DOM so refs are never null when makeVPC runs ─
   const localMountRef  = useRef<HTMLDivElement>(null);
   const remoteMountRef = useRef<HTMLDivElement>(null);
+
+  // ── Screen share video element — always in DOM so ref is valid before startShareScreen() ─
+  const shareVideoRef = useRef<HTMLVideoElement>(null);
 
   // ── Section refs and video aspect ratio for cover-fill ─
   const localSectionRef  = useRef<HTMLElement>(null);
@@ -380,6 +384,12 @@ export default function ZoomRoomInner({
         if (s === "Closed" && !destroyedRef.current) setState("ended");
       });
 
+      // Stop-share events fired when the browser's native "Stop sharing" bar is clicked
+      // or when another participant takes over sharing.
+      client.on("passively-stop-share", () => {
+        if (!destroyedRef.current) setIsSharingScreen(false);
+      });
+
       // Listen for aspect ratio changes to improve cover-fill accuracy
       client.on(
         "video-aspect-ratio-change",
@@ -462,6 +472,7 @@ export default function ZoomRoomInner({
     if (audioRafRef.current !== null) cancelAnimationFrame(audioRafRef.current);
     audioStreamRef.current?.getTracks().forEach((t) => t.stop());
     audioCtxRef.current?.close().catch(() => {});
+    try { if (streamRef.current) await streamRef.current.stopShareScreen(); } catch { /* ignore */ }
     try { if (streamRef.current) await streamRef.current.stopVideo(); } catch { /* ignore */ }
     try { if (streamRef.current) await streamRef.current.stopAudio(); } catch { /* ignore */ }
     try { if (clientRef.current) await clientRef.current.leave();     } catch { /* ignore */ }
@@ -477,6 +488,27 @@ export default function ZoomRoomInner({
       else         { await s.muteAudio();   setIsMuted(true);  }
     } catch { /* ignore */ }
   }, [isMuted]);
+
+  // ── Screen share ───────────────────────────────────────────────────────────
+  const startScreenShare = useCallback(async () => {
+    const s     = streamRef.current;
+    const video = shareVideoRef.current;
+    if (!s || !video) return;
+    try {
+      await s.startShareScreen(video);
+      setIsSharingScreen(true);
+    } catch (err) {
+      // User cancelled the browser picker or permission was denied — no state change needed.
+      console.warn("[ZoomRoom] startShareScreen:", err);
+    }
+  }, []);
+
+  const stopScreenShare = useCallback(async () => {
+    const s = streamRef.current;
+    if (!s) return;
+    try { await s.stopShareScreen(); } catch { /* ignore */ }
+    setIsSharingScreen(false);
+  }, []);
 
   // ── Toggle camera ──────────────────────────────────────────────────────────
   const toggleCamera = useCallback(async () => {
@@ -497,6 +529,7 @@ export default function ZoomRoomInner({
       if (audioRafRef.current !== null) cancelAnimationFrame(audioRafRef.current);
       audioStreamRef.current?.getTracks().forEach((t) => t.stop());
       audioCtxRef.current?.close().catch(() => {});
+      streamRef.current?.stopShareScreen().catch(() => {});
     };
   }, []);
 
@@ -644,82 +677,114 @@ export default function ZoomRoomInner({
         {/* ── Main workspace — fills between header and bottom bar ── */}
         <main className="flex-1 min-h-0 md:px-8 flex gap-6 overflow-hidden">
 
-          {/* Video grid */}
-          <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 gap-6 py-4 px-4 md:px-0 overflow-y-auto md:overflow-hidden">
+          {/* Content area — switches between 2-col grid (normal) and 75/25 flex row (sharing) */}
+          <div className={`flex-1 min-h-0 py-4 px-4 md:px-0 overflow-hidden ${
+            isSharingScreen
+              ? "flex flex-row gap-4"
+              : "grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto md:overflow-hidden"
+          }`}>
 
-            {/* ── Remote / Tutor panel ── */}
-            <div className="flex flex-col gap-3 h-full min-h-[300px]">
-              <section ref={remoteSectionRef} className="flex-1 relative group overflow-hidden rounded-2xl bg-surface-container shadow-2xl border border-white/5">
-                {/*
-                  remoteMountRef div is ALWAYS in the DOM so makeVPC() always
-                  has a valid element. WaitingOverlay is layered on top via
-                  absolute inset-0 — it does NOT replace this div.
-                */}
-                <div ref={remoteMountRef} className="absolute inset-0" />
-
-                {remoteUsers.length === 0 && <WaitingOverlay />}
-
-                {/* Voice indicator — rendered after WaitingOverlay so it sits on top */}
-                <div className="absolute bottom-4 left-4">
-                  <VoiceBars
-                    active={remoteUsers.some((u) => activeSpeakers.includes(u.userId))}
-                  />
-                </div>
-              </section>
-
-              <div className="flex items-center gap-2 px-1">
-                {remoteUsers.length > 0 ? (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-[#4edea3] animate-pulse" />
-                    <span className="font-headline font-bold text-xs uppercase tracking-widest text-[#4edea3]">
-                      {remoteUsers[0].displayName}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-white/10" />
-                    <span className="font-headline font-bold text-xs uppercase tracking-widest text-on-surface/40">
-                      Esperando participante
-                    </span>
-                  </>
-                )}
+            {/* ── Screen share panel — always in DOM so shareVideoRef is valid before startShareScreen() ── */}
+            <div className={isSharingScreen
+              ? "flex-[3] relative rounded-2xl overflow-hidden bg-black border border-white/5"
+              : "hidden"
+            }>
+              <video
+                ref={shareVideoRef}
+                className="absolute inset-0 w-full h-full object-contain"
+                autoPlay
+                muted
+                playsInline
+              />
+              <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-sm text-[#4edea3] text-[9px] px-2 py-1 rounded-lg font-headline uppercase tracking-widest">
+                Pantalla compartida
               </div>
             </div>
 
-            {/* ── Local / Self panel ── */}
-            <div className="flex flex-col gap-3 h-full min-h-[300px]">
-              <section ref={localSectionRef} className="flex-1 relative overflow-hidden rounded-2xl bg-surface-container shadow-2xl border border-white/5">
-                {/* Always-present Zoom mount — video-player-container lives here */}
-                <div ref={localMountRef} className="absolute inset-0" />
+            {/*
+              Videos wrapper — display:contents in grid mode (children become direct grid items),
+              flex-col in share mode (25% column with stacked panels).
+            */}
+            <div className={isSharingScreen
+              ? "flex-[1] flex flex-col gap-3 min-h-0"
+              : "contents"
+            }>
 
-                {/* Camera-off overlay — covers the frozen last frame */}
-                {isCamOff && isConnected && <CamOffOverlay />}
+              {/* ── Remote / Tutor panel ── */}
+              <div className={`flex flex-col gap-3 ${isSharingScreen ? "flex-1 min-h-0" : "h-full min-h-[300px]"}`}>
+                <section ref={remoteSectionRef} className="flex-1 relative group overflow-hidden rounded-2xl bg-surface-container shadow-2xl border border-white/5">
+                  {/*
+                    remoteMountRef div is ALWAYS in the DOM so makeVPC() always
+                    has a valid element. WaitingOverlay is layered on top via
+                    absolute inset-0 — it does NOT replace this div.
+                  */}
+                  <div ref={remoteMountRef} className="absolute inset-0" />
 
-                {/* Loading / joining state */}
-                {!isConnected && state !== "ended" && state !== "error" && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-surface-container">
-                    <Spinner />
+                  {remoteUsers.length === 0 && <WaitingOverlay />}
+
+                  {/* Voice indicator — rendered after WaitingOverlay so it sits on top */}
+                  <div className="absolute bottom-4 left-4">
+                    <VoiceBars
+                      active={remoteUsers.some((u) => activeSpeakers.includes(u.userId))}
+                    />
                   </div>
-                )}
+                </section>
 
-                {/* Voice indicator */}
-                <div className="absolute bottom-4 left-4">
-                  <VoiceBars active={activeSpeakers.includes(selfUserIdRef.current)} />
+                <div className="flex items-center gap-2 px-1">
+                  {remoteUsers.length > 0 ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-[#4edea3] animate-pulse" />
+                      <span className="font-headline font-bold text-xs uppercase tracking-widest text-[#4edea3]">
+                        {remoteUsers[0].displayName}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-white/10" />
+                      <span className="font-headline font-bold text-xs uppercase tracking-widest text-on-surface/40">
+                        Esperando participante
+                      </span>
+                    </>
+                  )}
                 </div>
-              </section>
-
-              <div className="flex items-center gap-2 px-1">
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ background: isConnected ? "#4edea3" : "rgba(255,255,255,.1)" }}
-                />
-                <span
-                  className="font-headline font-bold text-xs uppercase tracking-widest"
-                  style={{ color: isConnected ? "#4edea3" : "rgba(229,225,228,.4)" }}
-                >
-                  {userName}
-                </span>
               </div>
+
+              {/* ── Local / Self panel ── */}
+              <div className={`flex flex-col gap-3 ${isSharingScreen ? "flex-1 min-h-0" : "h-full min-h-[300px]"}`}>
+                <section ref={localSectionRef} className="flex-1 relative overflow-hidden rounded-2xl bg-surface-container shadow-2xl border border-white/5">
+                  {/* Always-present Zoom mount — video-player-container lives here */}
+                  <div ref={localMountRef} className="absolute inset-0" />
+
+                  {/* Camera-off overlay — covers the frozen last frame */}
+                  {isCamOff && isConnected && <CamOffOverlay />}
+
+                  {/* Loading / joining state */}
+                  {!isConnected && state !== "ended" && state !== "error" && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-surface-container">
+                      <Spinner />
+                    </div>
+                  )}
+
+                  {/* Voice indicator */}
+                  <div className="absolute bottom-4 left-4">
+                    <VoiceBars active={activeSpeakers.includes(selfUserIdRef.current)} />
+                  </div>
+                </section>
+
+                <div className="flex items-center gap-2 px-1">
+                  <span
+                    className="w-2 h-2 rounded-full"
+                    style={{ background: isConnected ? "#4edea3" : "rgba(255,255,255,.1)" }}
+                  />
+                  <span
+                    className="font-headline font-bold text-xs uppercase tracking-widest"
+                    style={{ color: isConnected ? "#4edea3" : "rgba(229,225,228,.4)" }}
+                  >
+                    {userName}
+                  </span>
+                </div>
+              </div>
+
             </div>
           </div>
 
@@ -783,20 +848,30 @@ export default function ZoomRoomInner({
                 </span>
               </button>
 
-              {/* Screen Share — visual placeholder only */}
+              {/* Screen Share */}
               <button
-                className="flex flex-col items-center justify-center bg-[#4edea3] text-[#0e0e10] rounded-xl p-2 w-16 h-16 cursor-not-allowed scale-100 active:scale-95 transition-transform duration-200 shadow-lg shadow-[#4edea3]/20"
-                aria-label="Compartir pantalla (no disponible)"
-                disabled
+                onClick={() => {
+                  if (isSharingScreen) { void stopScreenShare(); }
+                  else { void startScreenShare(); }
+                }}
+                disabled={!isConnected}
+                className={[
+                  "flex flex-col items-center justify-center rounded-xl p-2 w-16 h-16 transition-all duration-200 shadow-lg",
+                  isSharingScreen
+                    ? "bg-[#ffb4ab] text-[#0e0e10] shadow-[#ffb4ab]/20 active:scale-95"
+                    : "bg-[#4edea3] text-[#0e0e10] shadow-[#4edea3]/20 active:scale-95",
+                  !isConnected ? "cursor-not-allowed opacity-50" : "cursor-pointer",
+                ].join(" ")}
+                aria-label={isSharingScreen ? "Dejar de compartir pantalla" : "Compartir pantalla"}
               >
                 <span
                   className="material-symbols-outlined mb-1"
                   style={{ fontVariationSettings: "'FILL' 1" }}
                 >
-                  screen_share
+                  {isSharingScreen ? "stop_screen_share" : "screen_share"}
                 </span>
                 <span className="font-headline text-[9px] font-bold uppercase tracking-widest">
-                  Share
+                  {isSharingScreen ? "Stop" : "Share"}
                 </span>
               </button>
             </nav>
