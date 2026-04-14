@@ -129,7 +129,7 @@ export default function NextSessionCard({ booking, onCancelled }: NextSessionCar
       {cancelState === "idle" && (
         <>
           <button
-            onClick={() => router.push(`/sesion/${booking.token}`)}
+            onClick={() => { window.location.href = `/sesion/${booking.token}`; }}
             style={{
               display:        "flex",
               alignItems:     "center",
