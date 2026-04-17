@@ -1,6 +1,9 @@
 /**
  * POST /api/cancel
- * Week 4 — OBS-01: console.* replaced with structured log() calls.
+ *
+ * Applied fixes:
+ *   OBS-01: console.* replaced with structured log() calls.
+ *   SEC-04: CSRF protection — Origin header must match NEXT_PUBLIC_BASE_URL
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -15,8 +18,14 @@ import {
   sendCancellationNotificationEmail,
 } from "@/lib/email";
 import { log } from "@/lib/logger";
+import { isValidOrigin } from "@/lib/csrf";
 
 export async function POST(req: NextRequest) {
+  // ── CSRF ───────────────────────────────────────────────────────────────────
+  if (!isValidOrigin(req)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { token } = await req.json().catch(() => ({}));
 
   if (!token || typeof token !== "string") {

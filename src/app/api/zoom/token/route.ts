@@ -10,6 +10,7 @@
  *
  * Applied fixes:
  *   SEC-03: session-membership check — only the registered student or tutor may obtain a token
+ *   SEC-04: CSRF protection — Origin header must match NEXT_PUBLIC_BASE_URL
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -19,8 +20,14 @@ import { generateZoomJWT, getSessionDurationWithGrace } from "@/lib/zoom";
 import type { ZoomSessionRecord } from "@/lib/zoom";
 import { availabilityRatelimit } from "@/lib/ratelimit";
 import { log } from "@/lib/logger";
+import { isValidOrigin } from "@/lib/csrf";
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // ── CSRF ───────────────────────────────────────────────────────────────────
+  if (!isValidOrigin(req)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   // ── Auth ───────────────────────────────────────────────────────────────────
   const session = await auth();
   if (!session?.user?.email) {

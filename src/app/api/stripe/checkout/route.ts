@@ -4,7 +4,10 @@
  * Creates a Stripe PaymentIntent for the embedded PaymentElement flow.
  * Returns { clientSecret, paymentIntentId } — no redirect URL.
  *
- * Week 4 — OBS-01: console.* replaced with structured log() calls.
+ *
+ * Applied fixes:
+ *   OBS-01: console.* replaced with structured log() calls.
+ *   SEC-04: CSRF protection — Origin header must match NEXT_PUBLIC_BASE_URL
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -14,6 +17,7 @@ import { CheckoutSchema } from "@/lib/schemas";
 import { checkoutRatelimit } from "@/lib/ratelimit";
 import { getClientIp } from "@/lib/ip-utils";
 import { log } from "@/lib/logger";
+import { isValidOrigin } from "@/lib/csrf";
 
 async function getPriceAmount(priceId: string): Promise<{ amount: number; currency: string }> {
   const price = await stripe.prices.retrieve(priceId);
@@ -42,6 +46,11 @@ function getSingleSessionPriceId(duration: "1h" | "2h"): string {
 }
 
 export async function POST(req: NextRequest) {
+  // ── CSRF ───────────────────────────────────────────────────────────────────
+  if (!isValidOrigin(req)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const ip = getClientIp(req);
   const { success } = await checkoutRatelimit.limit(ip);
   if (!success) {

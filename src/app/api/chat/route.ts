@@ -1,9 +1,17 @@
+/**
+ * POST /api/chat
+ *
+ * Applied fixes:
+ *   SEC-04: CSRF protection — Origin header must match NEXT_PUBLIC_BASE_URL
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { chat, type GeminiMessage } from "@/lib/gemini";
 import { CHAT_SYSTEM_PROMPT } from "@/constants/chat-prompt";
 import { chatRatelimit } from "@/lib/ratelimit";
 import { getClientIp } from "@/lib/ip-utils";
 import { log } from "@/lib/logger";
+import { isValidOrigin } from "@/lib/csrf";
 
 const MAX_MESSAGE_LENGTH = 1000;
 const MAX_HISTORY_TURNS  = 10;
@@ -22,6 +30,11 @@ function isValidHistory(value: unknown): value is GeminiMessage[] {
 }
 
 export async function POST(req: NextRequest) {
+  // ── CSRF ───────────────────────────────────────────────────────────────────
+  if (!isValidOrigin(req)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const ip = getClientIp(req);
   const { success } = await chatRatelimit.limit(ip);
   if (!success) {

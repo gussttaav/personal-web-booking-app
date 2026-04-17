@@ -5,10 +5,14 @@
  *
  * MIN NOTICE: the advance-booking guard now reads SCHEDULE.minNoticeHours
  * from booking-config (single source of truth) instead of a hardcoded "2".
+ *
+ * Applied fixes:
+ *   SEC-04: CSRF protection — Origin header must match NEXT_PUBLIC_BASE_URL
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { isValidOrigin } from "@/lib/csrf";
 import { BookSchema } from "@/lib/schemas";
 import { createCalendarEvent, createCancellationToken } from "@/lib/calendar";
 import { decrementCredit, getCredits } from "@/lib/kv";
@@ -25,6 +29,11 @@ const SESSION_LABELS: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
+  // ── CSRF ───────────────────────────────────────────────────────────────────
+  if (!isValidOrigin(req)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const session = await auth();
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Autenticación requerida" }, { status: 401 });

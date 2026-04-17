@@ -13,6 +13,9 @@
  *   - Each streamed message carries `id: {index}`.
  *   - On reconnect, EventSource sends `Last-Event-ID: {index}` automatically.
  *   - The server reads that header as the cursor and only sends newer messages.
+ *
+ * Applied fixes:
+ *   SEC-04: CSRF protection — Origin header must match NEXT_PUBLIC_BASE_URL
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -20,6 +23,7 @@ import { auth } from "@/auth";
 import { kv } from "@/lib/redis";
 import { chatRatelimit } from "@/lib/ratelimit";
 import type { ZoomSessionRecord } from "@/lib/zoom";
+import { isValidOrigin } from "@/lib/csrf";
 
 const CHAT_TTL_SEC   = 86_400; // 24 hours
 const MAX_WAIT_MS    = 20_000; // stay under Vercel 25 s limit
@@ -38,6 +42,11 @@ export const dynamic = "force-dynamic";
 // ─── POST /api/chat-session ────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // ── CSRF ───────────────────────────────────────────────────────────────────
+  if (!isValidOrigin(req)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   // Auth
   const session = await auth();
   if (!session?.user?.email) {
