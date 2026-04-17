@@ -14,6 +14,11 @@
  *                     Redis list so disputes can be investigated without a
  *                     traditional database. The list is bounded to 100
  *                     entries per student via LTRIM — no unbounded growth.
+ *   SEC-01 — Atomic decrement via Lua script. The previous GET/modify/SET
+ *             pattern allowed two concurrent /api/book requests to both read
+ *             credits=1, both pass the check, and both decrement — consuming
+ *             one credit for two bookings. The Lua script below runs
+ *             server-side in Redis and is atomic.
  */
 
 import type { CreditResult, PackSize } from "@/types";
@@ -23,6 +28,30 @@ import { log } from "@/lib/logger";
 
 // Maximum number of audit entries kept per student (newest first)
 const MAX_AUDIT_ENTRIES = 100;
+
+// SEC-01: Atomic check-and-decrement. Runs server-side in Redis so the read,
+// validation, and write are a single serialized operation — no TOCTOU window.
+const DECREMENT_SCRIPT = `
+  local key = KEYS[1]
+  local raw = redis.call('GET', key)
+  if not raw then return cjson.encode({ok=false, remaining=0}) end
+  local record = cjson.decode(raw)
+
+  local now     = tonumber(ARGV[1])
+  local expires = tonumber(ARGV[2]) or 0
+  if expires > 0 and now > expires then
+    return cjson.encode({ok=false, remaining=0})
+  end
+
+  if record.credits <= 0 then
+    return cjson.encode({ok=false, remaining=0})
+  end
+
+  record.credits = record.credits - 1
+  record.lastUpdated = ARGV[3]
+  redis.call('SET', key, cjson.encode(record))
+  return cjson.encode({ok=true, remaining=record.credits})
+`;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -166,26 +195,25 @@ export async function decrementCredit(
 ): Promise<{ ok: boolean; remaining: number }> {
   const k      = key(email);
   const record = await kv.get<CreditRecord>(k);
+  if (!record) return { ok: false, remaining: 0 };
 
-  if (!record)                     return { ok: false, remaining: 0 };
-  if (isExpired(record.expiresAt)) return { ok: false, remaining: 0 };
-  if (record.credits <= 0)         return { ok: false, remaining: 0 };
+  const expiresMs = record.expiresAt ? new Date(record.expiresAt).getTime() : 0;
+  const result = await kv.eval<[number, number, string], string>(
+    DECREMENT_SCRIPT,
+    [k],
+    [Date.now(), expiresMs, new Date().toISOString()]
+  );
+  const parsed = JSON.parse(result) as { ok: boolean; remaining: number };
 
-  const updated: CreditRecord = {
-    ...record,
-    credits:     record.credits - 1,
-    lastUpdated: new Date().toISOString(),
-  };
+  if (parsed.ok) {
+    log("info", "Credit decremented", { service: "kv", email, remaining: parsed.remaining });
+    await appendAuditLog(email, "decrement", {
+      creditsBefore: parsed.remaining + 1,
+      creditsAfter:  parsed.remaining,
+    });
+  }
 
-  await kv.set(k, updated);
-
-  // Audit
-  await appendAuditLog(email, "decrement", {
-    creditsBefore: record.credits,
-    creditsAfter:  updated.credits,
-  });
-
-  return { ok: true, remaining: updated.credits };
+  return parsed;
 }
 
 export async function restoreCredit(

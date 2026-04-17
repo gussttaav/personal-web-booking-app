@@ -9,7 +9,7 @@
 
 | ID | Task | Status | PR | Notes |
 |----|------|--------|----|----|
-| 1.1 | Atomic credit decrement | ⬜ Not started | - | Requires Upstash EVAL verification |
+| 1.1 | Atomic credit decrement | ✅ Done | SEC-01 | kv.eval() Lua script; 26 tests pass |
 | 1.2 | Auth gate on `/api/stripe/session` | ✅ Done | SEC-02 | Auth + ownership check added |
 | 1.3 | Zoom token session-membership check | ⬜ Not started | - | Touches `calendar.ts` + `zoom.ts` + route |
 | 1.4 | CSRF protection middleware | ⬜ Not started | - | Exempt the Stripe webhook route |

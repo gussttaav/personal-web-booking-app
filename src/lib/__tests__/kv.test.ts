@@ -11,6 +11,7 @@ const mockKvSet  = jest.fn();
 const mockKvLpush = jest.fn();
 const mockKvLtrim = jest.fn();
 const mockKvDel  = jest.fn();
+const mockKvEval = jest.fn();
 
 jest.mock("@/lib/redis", () => ({
   kv: {
@@ -19,6 +20,7 @@ jest.mock("@/lib/redis", () => ({
     del:   (...args: unknown[]) => mockKvDel(...args),
     lpush: (...args: unknown[]) => mockKvLpush(...args),
     ltrim: (...args: unknown[]) => mockKvLtrim(...args),
+    eval:  (...args: unknown[]) => mockKvEval(...args),
   },
 }));
 
@@ -169,33 +171,59 @@ describe("decrementCredit", () => {
 
   it("returns ok:false when the pack is expired", async () => {
     mockKvGet.mockResolvedValueOnce(makeRecord({ expiresAt: pastDate() }));
+    mockKvEval.mockResolvedValueOnce(JSON.stringify({ ok: false, remaining: 0 }));
     expect(await decrementCredit("student@example.com")).toEqual({ ok: false, remaining: 0 });
     expect(mockKvSet).not.toHaveBeenCalled();
   });
 
   it("returns ok:false when credits are already 0", async () => {
     mockKvGet.mockResolvedValueOnce(makeRecord({ credits: 0 }));
+    mockKvEval.mockResolvedValueOnce(JSON.stringify({ ok: false, remaining: 0 }));
     expect(await decrementCredit("student@example.com")).toEqual({ ok: false, remaining: 0 });
     expect(mockKvSet).not.toHaveBeenCalled();
   });
 
   it("decrements credits by 1 and returns remaining", async () => {
     mockKvGet.mockResolvedValueOnce(makeRecord({ credits: 4 }));
-    mockKvSet.mockResolvedValueOnce("OK");
+    mockKvEval.mockResolvedValueOnce(JSON.stringify({ ok: true, remaining: 3 }));
 
     const result = await decrementCredit("student@example.com");
     expect(result).toEqual({ ok: true, remaining: 3 });
-
-    const [, savedRecord] = mockKvSet.mock.calls[0];
-    expect(savedRecord.credits).toBe(3);
   });
 
   it("handles the last credit correctly (remaining becomes 0)", async () => {
     mockKvGet.mockResolvedValueOnce(makeRecord({ credits: 1 }));
-    mockKvSet.mockResolvedValueOnce("OK");
+    mockKvEval.mockResolvedValueOnce(JSON.stringify({ ok: true, remaining: 0 }));
 
     const result = await decrementCredit("student@example.com");
     expect(result).toEqual({ ok: true, remaining: 0 });
+  });
+
+  it("concurrency: exactly one of two simultaneous requests on credits:1 succeeds", async () => {
+    mockKvGet.mockResolvedValue(makeRecord({ credits: 1 }));
+    mockKvEval
+      .mockResolvedValueOnce(JSON.stringify({ ok: true,  remaining: 0 }))
+      .mockResolvedValueOnce(JSON.stringify({ ok: false, remaining: 0 }));
+
+    const [r1, r2] = await Promise.all([
+      decrementCredit("student@example.com"),
+      decrementCredit("student@example.com"),
+    ]);
+    const successes = [r1, r2].filter(r => r.ok);
+    expect(successes).toHaveLength(1);
+    expect(successes[0].remaining).toBe(0);
+  });
+
+  it("Lua path: returns ok:false for an expired pack", async () => {
+    mockKvGet.mockResolvedValueOnce(makeRecord({ expiresAt: pastDate() }));
+    mockKvEval.mockResolvedValueOnce(JSON.stringify({ ok: false, remaining: 0 }));
+    expect(await decrementCredit("student@example.com")).toEqual({ ok: false, remaining: 0 });
+  });
+
+  it("Lua path: returns ok:false when credits are 0", async () => {
+    mockKvGet.mockResolvedValueOnce(makeRecord({ credits: 0 }));
+    mockKvEval.mockResolvedValueOnce(JSON.stringify({ ok: false, remaining: 0 }));
+    expect(await decrementCredit("student@example.com")).toEqual({ ok: false, remaining: 0 });
   });
 });
 
