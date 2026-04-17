@@ -9,11 +9,13 @@
  *  - Invalid/used token → redirect to homepage.
  *  - Valid token, not signed in → Google sign-in prompt with callbackUrl preserving the token.
  *  - Valid token, signed in → PreJoinSetup (device preview + "Entrar al aula").
+ *
+ * SEC-05: Only join tokens are accepted. Cancel tokens are rejected.
  */
 
 import { redirect } from "next/navigation";
 import { toZonedTime, format } from "date-fns-tz";
-import { verifyCancellationToken } from "@/lib/calendar";
+import { resolveJoinToken } from "@/lib/calendar";
 import { auth } from "@/auth";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -41,12 +43,9 @@ export default async function SesionPage({
 }) {
   const { token } = await params;
 
-  const result = await verifyCancellationToken(token);
-  if (!result) {
-    redirect("/");
-  }
+  const record = await resolveJoinToken(token);
+  if (!record) redirect("/");
 
-  const { record } = result;
   const sessionLabel = SESSION_LABELS[record.sessionType] ?? record.sessionType;
   const timeLabel    = formatSessionTime(record.startsAt);
 

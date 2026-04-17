@@ -282,6 +282,13 @@ export async function deleteCalendarEvent(eventId: string): Promise<void> {
 }
 
 // ─── Cancellation tokens ──────────────────────────────────────────────────────
+//
+// SEC-05: Split join token from cancel token.
+// Previously a single token allowed both joining (/sesion/{token}) and
+// cancelling (/cancelar?token={token}). Forwarding a confirmation email
+// therefore leaked cancel capability. Two scoped tokens fix this:
+//   cancel:{cancelToken} → BookingRecord  (grants cancel/reschedule)
+//   join:{joinToken}     → JoinTokenRecord (grants session entry only)
 
 const CANCEL_SECRET = process.env.CANCEL_SECRET!;
 
@@ -289,20 +296,54 @@ function signToken(payload: string): string {
   return crypto.createHmac("sha256", CANCEL_SECRET).update(payload).digest("hex");
 }
 
-export async function createCancellationToken(
-  record: Omit<BookingRecord, "used">
-): Promise<string> {
-  const payload  = `${record.eventId}:${record.email}:${record.startsAt}`;
-  const token    = signToken(payload);
-  const ttlSecs  = Math.max(3600, Math.floor((new Date(record.endsAt).getTime() + 3_600_000 - Date.now()) / 1000));
+type JoinTokenRecord = {
+  eventId:     string;
+  email:       string;
+  name:        string;
+  sessionType: string;
+  startsAt:    string;
+};
 
-  await kv.set(`cancel:${token}`, { ...record, used: false }, { ex: ttlSecs });
+export async function createBookingTokens(
+  record: Omit<BookingRecord, "used">
+): Promise<{ cancelToken: string; joinToken: string }> {
+  const cancelPayload = `${record.eventId}:${record.email}:${record.startsAt}`;
+  const joinPayload   = `join:${cancelPayload}`;
+
+  const cancelToken = signToken(cancelPayload);
+  const joinToken   = signToken(joinPayload);
+
+  const ttlSecs = Math.max(3600, Math.floor(
+    (new Date(record.endsAt).getTime() + 3_600_000 - Date.now()) / 1000
+  ));
+
+  await kv.set(`cancel:${cancelToken}`, { ...record, used: false }, { ex: ttlSecs });
   // Index token in the student's bookings sorted set (score = start timestamp ms)
   await kv.zadd(`bookings:${record.email.toLowerCase().trim()}`, {
     score:  new Date(record.startsAt).getTime(),
-    member: token,
+    member: cancelToken,
   });
-  return token;
+  await kv.set(
+    `join:${joinToken}`,
+    {
+      eventId:     record.eventId,
+      email:       record.email.toLowerCase().trim(),
+      name:        record.name,
+      sessionType: record.sessionType,
+      startsAt:    record.startsAt,
+    } satisfies JoinTokenRecord,
+    { ex: ttlSecs }
+  );
+
+  return { cancelToken, joinToken };
+}
+
+/** @deprecated Use createBookingTokens. Kept for backward compat during migration. */
+export async function createCancellationToken(
+  record: Omit<BookingRecord, "used">
+): Promise<string> {
+  const { cancelToken } = await createBookingTokens(record);
+  return cancelToken;
 }
 
 export async function verifyCancellationToken(
@@ -320,6 +361,13 @@ export async function verifyCancellationToken(
   const startsAt       = new Date(record.startsAt);
   const twoHoursBefore = new Date(startsAt.getTime() - 2 * 3_600_000);
   return { record, withinWindow: new Date() < twoHoursBefore };
+}
+
+export async function resolveJoinToken(
+  joinToken: string
+): Promise<JoinTokenRecord | null> {
+  if (!/^[0-9a-f]{64}$/.test(joinToken)) return null;
+  return kv.get<JoinTokenRecord>(`join:${joinToken}`);
 }
 
 export async function consumeCancellationToken(token: string, email?: string): Promise<boolean> {

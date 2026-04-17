@@ -19,7 +19,7 @@ import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { kv } from "@/lib/redis";
 import { addOrUpdateStudent } from "@/lib/kv";
-import { getAvailableSlots, createCalendarEvent, createCancellationToken } from "@/lib/calendar";
+import { getAvailableSlots, createCalendarEvent, createBookingTokens } from "@/lib/calendar";
 import { sendConfirmationEmail, sendNewBookingNotificationEmail } from "@/lib/email";
 import { log } from "@/lib/logger";
 import { getSessionDurationWithGrace } from "@/lib/zoom";
@@ -179,6 +179,7 @@ async function handleSingleSessionPayment(
   let eventId:         string;
   let zoomSessionName: string;
   let cancelToken:     string;
+  let joinToken:       string;
 
   try {
     const result = await withRetry(
@@ -195,7 +196,7 @@ async function handleSingleSessionPayment(
     );
     eventId         = result.eventId;
     zoomSessionName = result.zoomSessionName;
-    cancelToken = await createCancellationToken({ eventId, email, name, sessionType, startsAt: startIso, endsAt: endIso });
+    ({ cancelToken, joinToken } = await createBookingTokens({ eventId, email, name, sessionType, startsAt: startIso, endsAt: endIso }));
   } catch (err) {
     log("error", "Calendar event creation failed after retries", { service: "webhook", email, startIso, intentId, error: String(err) });
     await writeDeadLetter(intentId, email, startIso, err);
@@ -204,7 +205,7 @@ async function handleSingleSessionPayment(
 
   await kv.set(idempotencyKey, { processedAt: new Date().toISOString() }, { ex: SINGLE_SESSION_IDEMPOTENCY_TTL });
 
-  const joinUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/sesion/${cancelToken}`;
+  const joinUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/sesion/${joinToken}`;
 
   // Schedule auto-termination of the Zoom session after durationWithGrace.
   // TODO: replace with Upstash QStash for production reliability —
@@ -227,7 +228,7 @@ async function handleSingleSessionPayment(
 
   try {
     await Promise.all([
-      sendConfirmationEmail({ to: email, studentName: name, sessionLabel, startIso, endIso, joinUrl, cancelToken, note: null, studentTz: null, sessionType }),
+      sendConfirmationEmail({ to: email, studentName: name, sessionLabel, startIso, endIso, joinToken, cancelToken, note: null, studentTz: null, sessionType }),
       sendNewBookingNotificationEmail({ studentEmail: email, studentName: name, sessionLabel, startIso, endIso, joinUrl, note: null }),
     ]);
   } catch (emailErr) {
@@ -358,6 +359,7 @@ export async function POST(req: NextRequest) {
       let eventId:         string;
       let zoomSessionName: string;
       let cancelToken:     string;
+      let joinToken:       string;
 
       try {
         const result = await withRetry(
@@ -374,7 +376,7 @@ export async function POST(req: NextRequest) {
         );
         eventId         = result.eventId;
         zoomSessionName = result.zoomSessionName;
-        cancelToken = await createCancellationToken({ eventId, email, name, sessionType, startsAt: startIso, endsAt: endIso });
+        ({ cancelToken, joinToken } = await createBookingTokens({ eventId, email, name, sessionType, startsAt: startIso, endsAt: endIso }));
       } catch (err) {
         log("error", "Calendar event creation failed after retries", { service: "webhook", email, startIso, stripeSessionId, error: String(err) });
         await writeDeadLetter(stripeSessionId, email, startIso, err);
@@ -383,7 +385,7 @@ export async function POST(req: NextRequest) {
 
       await kv.set(idempotencyKey, { processedAt: new Date().toISOString() }, { ex: SINGLE_SESSION_IDEMPOTENCY_TTL });
 
-      const joinUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/sesion/${cancelToken}`;
+      const joinUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/sesion/${joinToken}`;
 
       const delayMs = getSessionDurationWithGrace(sessionType) * 60 * 1_000;
       void (async () => {
@@ -402,7 +404,7 @@ export async function POST(req: NextRequest) {
 
       try {
         await Promise.all([
-          sendConfirmationEmail({ to: email, studentName: name, sessionLabel, startIso, endIso, joinUrl, cancelToken, note: null, studentTz: null, sessionType }),
+          sendConfirmationEmail({ to: email, studentName: name, sessionLabel, startIso, endIso, joinToken, cancelToken, note: null, studentTz: null, sessionType }),
           sendNewBookingNotificationEmail({ studentEmail: email, studentName: name, sessionLabel, startIso, endIso, joinUrl, note: null }),
         ]);
       } catch (emailErr) {

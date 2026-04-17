@@ -13,7 +13,7 @@
 | 1.2 | Auth gate on `/api/stripe/session` | ✅ Done | SEC-02 | Auth + ownership check added |
 | 1.3 | Zoom token session-membership check | ✅ Done | SEC-03 | studentEmail in ZoomSessionRecord; membership check in token route |
 | 1.4 | CSRF protection middleware | ✅ Done | SEC-04 | isValidOrigin helper; 5 tests pass; 6 routes protected |
-| 1.5 | Split join token from cancel token | ⬜ Not started | - | Requires email template update |
+| 1.5 | Split join token from cancel token | ✅ Done | SEC-05 | createBookingTokens + resolveJoinToken; join/cancel scoped; 32 tests pass |
 | 1.6 | Fix SSE duplicate Redis client | ✅ Done | SEC-06 | Trivial one-line fix |
 
 **Exit criteria:** All six tasks green, `npm run build` passes, no regressions in existing Jest suites.

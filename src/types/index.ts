@@ -37,6 +37,7 @@ export interface BookResponse {
   zoomSessionName: string;
   zoomPasscode:    string;
   cancelToken:     string;
+  joinToken:       string;  // SEC-05
   emailFailed:     boolean;
 }
 

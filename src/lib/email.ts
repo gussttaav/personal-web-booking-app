@@ -112,7 +112,7 @@ export async function sendConfirmationEmail(params: {
   sessionLabel: string;
   startIso: string;
   endIso: string;
-  joinUrl: string;
+  joinToken: string;
   cancelToken: string;
   note: string | null;
   studentTz: string | null;
@@ -122,9 +122,11 @@ export async function sendConfirmationEmail(params: {
   const safeName         = escapeHtml(params.studentName);
   const safeSessionLabel = escapeHtml(params.sessionLabel);
   const safeNote         = params.note ? escapeHtml(params.note) : null;
-  // joinUrl, cancelToken, and URLs are system-generated — not user input.
+  // joinToken, cancelToken, and URLs are system-generated — not user input.
 
   const tz         = params.studentTz ?? ADMIN_TZ;
+  // SEC-05: join URL uses joinToken (session entry only); cancel URL uses cancelToken (cancel/reschedule only)
+  const joinUrl    = `${BASE_URL}/sesion/${params.joinToken}`;
   const cancelUrl  = `${BASE_URL}/cancelar?token=${params.cancelToken}`;
   const reschedUrl = `${BASE_URL}${RESCHEDULE_PATHS[params.sessionType] ?? "/"}&token=${params.cancelToken}`;
   const dateLabel  = formatDateInTz(params.startIso, tz);
@@ -136,8 +138,8 @@ export async function sendConfirmationEmail(params: {
     title:       `${params.sessionLabel} con Gustavo Torres`,
     startIso:    params.startIso,
     endIso:      params.endIso,
-    description: `Enlace de sesión: ${params.joinUrl}\n\nClase con Gustavo Torres Guerrero — gustavoai.dev`,
-    location:    params.joinUrl,
+    description: `Enlace de sesión: ${joinUrl}\n\nClase con Gustavo Torres Guerrero — gustavoai.dev`,
+    location:    joinUrl,
   });
 
   await send({
@@ -160,7 +162,7 @@ export async function sendConfirmationEmail(params: {
 
         <div class="label">Enlace de la sesión</div>
         <div class="value" style="margin-bottom:8px">
-          <a class="meet-btn" href="${params.joinUrl}">Unirse a la sesión →</a>
+          <a class="meet-btn" href="${joinUrl}">Unirse a la sesión →</a>
         </div>
 
         ${safeNote ? `

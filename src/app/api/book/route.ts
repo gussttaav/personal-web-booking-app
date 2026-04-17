@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { isValidOrigin } from "@/lib/csrf";
 import { BookSchema } from "@/lib/schemas";
-import { createCalendarEvent, createCancellationToken } from "@/lib/calendar";
+import { createCalendarEvent, createBookingTokens } from "@/lib/calendar";
 import { decrementCredit, getCredits } from "@/lib/kv";
 import { sendConfirmationEmail, sendNewBookingNotificationEmail } from "@/lib/email";
 import { log } from "@/lib/logger";
@@ -152,12 +152,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Error al crear el evento" }, { status: 500 });
   }
 
-  const cancelToken = await createCancellationToken({
+  const { cancelToken, joinToken } = await createBookingTokens({
     eventId, email, name, sessionType, startsAt: startIso, endsAt: endIso,
     ...(packSizeForToken !== undefined ? { packSize: packSizeForToken } : {}),
   });
 
-  const joinUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/sesion/${cancelToken}`;
+  const joinUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/sesion/${joinToken}`;
 
   async function sendWithRetry(fn: () => Promise<void>, label: string): Promise<boolean> {
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
     sendWithRetry(
       () => sendConfirmationEmail({
         to: email, studentName: name, sessionLabel, startIso, endIso,
-        joinUrl, cancelToken, note: note ?? null, studentTz: timezone ?? null, sessionType,
+        joinToken, cancelToken, note: note ?? null, studentTz: timezone ?? null, sessionType,
       }),
       "confirmation email"
     ),
@@ -190,5 +190,5 @@ export async function POST(req: NextRequest) {
     ),
   ]);
 
-  return NextResponse.json({ ok: true, eventId, zoomSessionName, zoomPasscode, cancelToken, emailFailed: !confirmSent });
+  return NextResponse.json({ ok: true, eventId, zoomSessionName, zoomPasscode, cancelToken, joinToken, emailFailed: !confirmSent });
 }

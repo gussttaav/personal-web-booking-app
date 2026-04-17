@@ -3,8 +3,10 @@
  *
  * Covers the pure-logic portions of calendar.ts that can be tested without
  * a live Google Calendar or Redis connection:
- *   - createCancellationToken: key construction, TTL calculation, HMAC signing
+ *   - createBookingTokens: dual-token issuance (SEC-05)
+ *   - createCancellationToken: backward-compat wrapper
  *   - verifyCancellationToken: format validation, signature check, window check
+ *   - resolveJoinToken: format validation, Redis lookup (SEC-05)
  *   - consumeCancellationToken: hard delete
  *   - acquireSlotLock / releaseSlotLock: Redis SET NX PX behavior
  *
@@ -18,12 +20,14 @@
 const mockKvGet  = jest.fn();
 const mockKvSet  = jest.fn();
 const mockKvDel  = jest.fn();
+const mockKvZadd = jest.fn();
 
 jest.mock("@/lib/redis", () => ({
   kv: {
-    get: (...args: unknown[]) => mockKvGet(...args),
-    set: (...args: unknown[]) => mockKvSet(...args),
-    del: (...args: unknown[]) => mockKvDel(...args),
+    get:  (...args: unknown[]) => mockKvGet(...args),
+    set:  (...args: unknown[]) => mockKvSet(...args),
+    del:  (...args: unknown[]) => mockKvDel(...args),
+    zadd: (...args: unknown[]) => mockKvZadd(...args),
   },
 }));
 
@@ -46,8 +50,10 @@ jest.mock("@/lib/booking-config", () => ({
 }));
 
 import {
+  createBookingTokens,
   createCancellationToken,
   verifyCancellationToken,
+  resolveJoinToken,
   consumeCancellationToken,
   acquireSlotLock,
   releaseSlotLock,
@@ -77,30 +83,33 @@ function makeRecord(overrides: Partial<Omit<BookingRecord, "used">> = {}): Omit<
 // ─── createCancellationToken ──────────────────────────────────────────────────
 
 describe("createCancellationToken", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockKvSet.mockResolvedValue("OK");
+    mockKvZadd.mockResolvedValue(1);
+  });
 
   it("returns a 64-character hex string (SHA-256 HMAC)", async () => {
-    mockKvSet.mockResolvedValueOnce("OK");
     const token = await createCancellationToken(makeRecord());
     expect(token).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("writes to the correct Redis key with { used: false }", async () => {
-    mockKvSet.mockResolvedValueOnce("OK");
+  it("writes to the cancel Redis key with { used: false }", async () => {
     const token = await createCancellationToken(makeRecord());
 
-    expect(mockKvSet).toHaveBeenCalledTimes(1);
-    const [key, value, options] = mockKvSet.mock.calls[0];
-    expect(key).toBe(`cancel:${token}`);
+    // createCancellationToken delegates to createBookingTokens → 2 kv.set calls (cancel + join)
+    const cancelCall = mockKvSet.mock.calls.find(([key]) => key === `cancel:${token}`);
+    expect(cancelCall).toBeDefined();
+    const [, value, options] = cancelCall!;
     expect(value.used).toBe(false);
-    expect(options?.ex).toBeGreaterThan(0); // TTL must be set
+    expect(options?.ex).toBeGreaterThan(0);
   });
 
   it("sets a TTL that accounts for session end + 1h buffer", async () => {
-    mockKvSet.mockResolvedValueOnce("OK");
     const endsAt = futureIso(2); // session ends in 2 hours
     await createCancellationToken(makeRecord({ endsAt }));
 
+    // calls[0] is always the cancel key set (first kv.set in createBookingTokens)
     const [, , options] = mockKvSet.mock.calls[0];
     // TTL should be roughly 3 hours (2h until end + 1h buffer), allow ±60s slop
     const expectedMin = 2 * 3600;
@@ -110,7 +119,6 @@ describe("createCancellationToken", () => {
   });
 
   it("enforces a minimum TTL of 1 hour even for immediate sessions", async () => {
-    mockKvSet.mockResolvedValueOnce("OK");
     const endsAt = new Date(Date.now() - 1000).toISOString(); // already ended
     await createCancellationToken(makeRecord({ endsAt }));
 
@@ -119,7 +127,6 @@ describe("createCancellationToken", () => {
   });
 
   it("produces the same token for the same eventId/email/startsAt", async () => {
-    mockKvSet.mockResolvedValue("OK");
     const record = makeRecord();
     const [t1, t2] = await Promise.all([
       createCancellationToken(record),
@@ -132,7 +139,11 @@ describe("createCancellationToken", () => {
 // ─── verifyCancellationToken ──────────────────────────────────────────────────
 
 describe("verifyCancellationToken", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockKvSet.mockResolvedValue("OK");
+    mockKvZadd.mockResolvedValue(1);
+  });
 
   it("rejects tokens shorter than 64 hex chars without touching Redis", async () => {
     const result = await verifyCancellationToken("short");
@@ -153,24 +164,18 @@ describe("verifyCancellationToken", () => {
   });
 
   it("returns null when the record has used:true", async () => {
-    // We need a token that will pass HMAC verification — create one first
-    mockKvSet.mockResolvedValueOnce("OK");
     const record = makeRecord();
     const token  = await createCancellationToken(record);
 
-    // Now simulate the stored record being marked used
     mockKvGet.mockResolvedValueOnce({ ...record, used: true });
     const result = await verifyCancellationToken(token);
     expect(result).toBeNull();
   });
 
   it("returns null when the HMAC signature does not match (tampered token)", async () => {
-    // Store a valid record but present a different token
-    mockKvSet.mockResolvedValueOnce("OK");
     const record    = makeRecord();
     await createCancellationToken(record);
 
-    // Return the record when queried by a different token
     const badToken = "f".repeat(64);
     mockKvGet.mockResolvedValueOnce({ ...record, used: false });
 
@@ -179,7 +184,6 @@ describe("verifyCancellationToken", () => {
   });
 
   it("returns the record with withinWindow:true for a session far in the future", async () => {
-    mockKvSet.mockResolvedValueOnce("OK");
     const record = makeRecord({ startsAt: futureIso(48) }); // 48h from now
     const token  = await createCancellationToken(record);
 
@@ -192,7 +196,6 @@ describe("verifyCancellationToken", () => {
   });
 
   it("returns withinWindow:false when session starts in less than 2 hours", async () => {
-    mockKvSet.mockResolvedValueOnce("OK");
     const record = makeRecord({ startsAt: futureIso(1) }); // 1h from now — within 2h window
     const token  = await createCancellationToken(record);
 
@@ -200,6 +203,106 @@ describe("verifyCancellationToken", () => {
     const result = await verifyCancellationToken(token);
 
     expect(result?.withinWindow).toBe(false);
+  });
+});
+
+// ─── createBookingTokens (SEC-05) ─────────────────────────────────────────────
+
+describe("createBookingTokens", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockKvSet.mockResolvedValue("OK");
+    mockKvZadd.mockResolvedValue(1);
+  });
+
+  it("returns two distinct 64-character hex tokens", async () => {
+    const { cancelToken, joinToken } = await createBookingTokens(makeRecord());
+    expect(cancelToken).toMatch(/^[0-9a-f]{64}$/);
+    expect(joinToken).toMatch(/^[0-9a-f]{64}$/);
+    expect(cancelToken).not.toBe(joinToken);
+  });
+
+  it("stores cancel key with { used: false } and correct TTL", async () => {
+    const { cancelToken } = await createBookingTokens(makeRecord());
+    const cancelCall = mockKvSet.mock.calls.find(([key]) => key === `cancel:${cancelToken}`);
+    expect(cancelCall).toBeDefined();
+    const [, value, options] = cancelCall!;
+    expect(value.used).toBe(false);
+    expect(options?.ex).toBeGreaterThan(0);
+  });
+
+  it("stores join key with expected shape and same TTL as cancel key", async () => {
+    const record = makeRecord();
+    const { joinToken } = await createBookingTokens(record);
+    const joinCall = mockKvSet.mock.calls.find(([key]) => key === `join:${joinToken}`);
+    expect(joinCall).toBeDefined();
+    const [, value, options] = joinCall!;
+    expect(value.eventId).toBe(record.eventId);
+    expect(value.email).toBe(record.email.toLowerCase().trim());
+    expect(value.name).toBe(record.name);
+    expect(value.sessionType).toBe(record.sessionType);
+    expect(value.startsAt).toBe(record.startsAt);
+    expect(options?.ex).toBeGreaterThan(0);
+  });
+
+  it("cancel and join keys use the same TTL", async () => {
+    const { cancelToken, joinToken } = await createBookingTokens(makeRecord());
+    const [, , cancelOpts] = mockKvSet.mock.calls.find(([k]) => k === `cancel:${cancelToken}`)!;
+    const [, , joinOpts]   = mockKvSet.mock.calls.find(([k]) => k === `join:${joinToken}`)!;
+    expect(cancelOpts.ex).toBe(joinOpts.ex);
+  });
+
+  it("cancelToken matches what createCancellationToken returns for the same record", async () => {
+    const record = makeRecord();
+    const { cancelToken } = await createBookingTokens(record);
+    jest.clearAllMocks();
+    mockKvSet.mockResolvedValue("OK");
+    mockKvZadd.mockResolvedValue(1);
+    const legacyToken = await createCancellationToken(record);
+    expect(cancelToken).toBe(legacyToken);
+  });
+});
+
+// ─── resolveJoinToken (SEC-05) ────────────────────────────────────────────────
+
+describe("resolveJoinToken", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockKvSet.mockResolvedValue("OK");
+    mockKvZadd.mockResolvedValue(1);
+  });
+
+  it("rejects malformed tokens without hitting Redis", async () => {
+    expect(await resolveJoinToken("short")).toBeNull();
+    expect(await resolveJoinToken("z".repeat(64))).toBeNull();
+    expect(mockKvGet).not.toHaveBeenCalled();
+  });
+
+  it("returns null for unknown token (Redis miss)", async () => {
+    mockKvGet.mockResolvedValueOnce(null);
+    const result = await resolveJoinToken("a".repeat(64));
+    expect(result).toBeNull();
+    expect(mockKvGet).toHaveBeenCalledWith(`join:${"a".repeat(64)}`);
+  });
+
+  it("returns the stored record for a valid join token", async () => {
+    const record = makeRecord();
+    const { joinToken } = await createBookingTokens(record);
+    const stored = { eventId: record.eventId, email: record.email.toLowerCase(), name: record.name, sessionType: record.sessionType, startsAt: record.startsAt };
+    mockKvGet.mockResolvedValueOnce(stored);
+    const result = await resolveJoinToken(joinToken);
+    expect(result).toEqual(stored);
+    expect(mockKvGet).toHaveBeenCalledWith(`join:${joinToken}`);
+  });
+
+  it("rejects a cancel token used as a join token (different key namespace)", async () => {
+    const record = makeRecord();
+    const { cancelToken } = await createBookingTokens(record);
+    // Cancel token exists under cancel:{cancelToken}, not join:{cancelToken}
+    mockKvGet.mockResolvedValueOnce(null);
+    const result = await resolveJoinToken(cancelToken);
+    expect(result).toBeNull();
+    expect(mockKvGet).toHaveBeenCalledWith(`join:${cancelToken}`);
   });
 });
 
