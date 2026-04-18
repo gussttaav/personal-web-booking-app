@@ -39,7 +39,7 @@
 | ID | Task | Status | PR | Notes |
 |----|------|--------|----|----|
 | 3.1 | Define repository interfaces | ✅ Done | ARCH-10 | src/domain/types.ts + errors.ts + 5 repository interfaces; build + 84 tests pass |
-| 3.2 | Implement Redis repository adapters | ⬜ Not started | - | Wrap existing `kv.ts` |
+| 3.2 | Implement Redis repository adapters | ✅ Done | ARCH-11 | 5 adapter classes under src/infrastructure/redis/; thin wrappers; 88 tests pass |
 | 3.3 | Extract `CreditService` | ⬜ Not started | - | Move logic out of routes |
 | 3.4 | Extract `BookingService` | ⬜ Not started | - | Orchestrates 4+ external systems |
 | 3.5 | Extract `PaymentService` | ⬜ Not started | - | Webhook processing lives here |
