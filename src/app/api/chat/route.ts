@@ -3,15 +3,18 @@
  *
  * Applied fixes:
  *   SEC-04: CSRF protection — Origin header must match NEXT_PUBLIC_BASE_URL
+ *   REL-04: Tiered rate limiting — authenticated users get 20/min by email;
+ *           anonymous users get 5/min + 30/day by IP to cap Gemini spend.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { chat, type GeminiMessage } from "@/lib/gemini";
 import { CHAT_SYSTEM_PROMPT } from "@/constants/chat-prompt";
-import { chatRatelimit } from "@/lib/ratelimit";
+import { chatRatelimit, chatRatelimitAnon, chatRatelimitAnonDaily } from "@/lib/ratelimit";
 import { getClientIp } from "@/lib/ip-utils";
 import { log } from "@/lib/logger";
 import { isValidOrigin } from "@/lib/csrf";
+import { auth } from "@/auth";
 
 const MAX_MESSAGE_LENGTH = 1000;
 const MAX_HISTORY_TURNS  = 10;
@@ -36,12 +39,40 @@ export async function POST(req: NextRequest) {
   }
 
   const ip = getClientIp(req);
-  const { success } = await chatRatelimit.limit(ip);
-  if (!success) {
-    return NextResponse.json(
-      { error: "Demasiadas peticiones. Espera un momento e inténtalo de nuevo." },
-      { status: 429 }
-    );
+  const session = await auth();
+  const isAuthenticated = !!session?.user?.email;
+
+  // REL-04: Tiered rate limiting
+  if (isAuthenticated) {
+    const { success } = await chatRatelimit.limit(`auth:${session.user!.email}`);
+    if (!success) {
+      return NextResponse.json(
+        { error: "Demasiadas peticiones. Espera un momento e inténtalo de nuevo." },
+        { status: 429 }
+      );
+    }
+  } else {
+    const [perMinute, perDay] = await Promise.all([
+      chatRatelimitAnon.limit(ip),
+      chatRatelimitAnonDaily.limit(ip),
+    ]);
+
+    if (!perMinute.success) {
+      return NextResponse.json(
+        { error: "Demasiadas peticiones. Espera un momento e inténtalo de nuevo." },
+        { status: 429 }
+      );
+    }
+
+    if (!perDay.success) {
+      return NextResponse.json(
+        {
+          error: "Has alcanzado el límite diario. Inicia sesión para seguir chateando, o vuelve mañana.",
+          requiresAuth: true,
+        },
+        { status: 429 }
+      );
+    }
   }
 
   let body: unknown;

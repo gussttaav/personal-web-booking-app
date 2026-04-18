@@ -27,7 +27,7 @@
 | 2.1 | Replace `setTimeout` with QStash | ✅ Done | REL-01 | qstash singleton + zoom-terminate endpoint; verifySignatureAppRouter; book + webhook both schedule; 77 tests pass |
 | 2.2 | Deduplicate webhook handlers | ✅ Done | REL-02 | SingleSessionInput + processSingleSession; issueRefund helper; ~100 duplicate lines removed |
 | 2.3 | Dead-letter recovery endpoint | ✅ Done | REL-03 | isAdmin helper; GET list + POST retry; processSingleSession extracted to single-session.ts; ADMIN_EMAILS env var; 82 tests pass |
-| 2.4 | Chat route auth + tiered rate limiting | ⬜ Not started | - | Keep unauthenticated access |
+| 2.4 | Chat route auth + tiered rate limiting | ✅ Done | REL-04 | chatRatelimitAnon (5/min) + chatRatelimitAnonDaily (30/day); auth users keyed by email; requiresAuth flag on daily cap |
 | 2.5 | Webhook async processing via `waitUntil` | ✅ Done | REL-05 | @vercel/functions waitUntil; emails deferred; KV + calendar still blocking |
 
 **Exit criteria:** No unreliable timers in production paths, dead-letter entries recoverable via API, Gemini spend capped per anonymous IP.

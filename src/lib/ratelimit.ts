@@ -45,3 +45,20 @@ export const availabilityRatelimit = new Ratelimit({
   limiter: Ratelimit.slidingWindow(60, "1 m"),
   prefix:  "rl:availability",
 });
+
+// REL-04 — Anonymous chat: 5 messages per minute per IP.
+// Authenticated users continue to use chatRatelimit (20/min).
+export const chatRatelimitAnon = new Ratelimit({
+  redis:   kv,
+  limiter: Ratelimit.slidingWindow(5, "1 m"),
+  prefix:  "rl:chat:anon",
+});
+
+// REL-04 — Anonymous chat daily cap: 30 messages per day per IP.
+// Caps total Gemini spend per anonymous IP. Authenticated users
+// rely on the 20/min limiter only (no daily cap for signed-in users).
+export const chatRatelimitAnonDaily = new Ratelimit({
+  redis:   kv,
+  limiter: Ratelimit.slidingWindow(30, "1 d"),
+  prefix:  "rl:chat:anon:daily",
+});
