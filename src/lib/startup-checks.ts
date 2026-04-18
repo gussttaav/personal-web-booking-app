@@ -54,6 +54,9 @@ const REQUIRED_ENV_VARS = [
   "QSTASH_TOKEN",
   "QSTASH_CURRENT_SIGNING_KEY",
   "QSTASH_NEXT_SIGNING_KEY",
+
+  // Admin access (comma-separated emails — REL-03)
+  "ADMIN_EMAILS",
 ] as const;
 
 export function validateEnv(): void {
