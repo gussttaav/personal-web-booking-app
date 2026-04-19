@@ -1,5 +1,6 @@
 // ARCH-10: Booking repository interface.
-import type { BookingRecord } from "../types";
+// ARCH-13: listByUser now returns cancel tokens alongside records; recordRescheduleFailure added.
+import type { BookingRecord, SessionType } from "../types";
 
 export interface IBookingRepository {
   /**
@@ -34,8 +35,22 @@ export interface IBookingRepository {
   /**
    * Returns all active (non-cancelled, future) bookings for a user, ordered by
    * start time ascending. Returns an empty array if the user has no bookings.
+   * Each entry includes the cancel token (the Redis key) alongside the record.
    */
-  listByUser(email: string): Promise<BookingRecord[]>;
+  listByUser(email: string): Promise<{ cancelToken: string; record: BookingRecord }[]>;
+
+  /**
+   * Persists a failed reschedule attempt to the dead-letter store so it can be
+   * recovered or investigated manually. Best-effort — callers should not throw
+   * on failure here.
+   */
+  recordRescheduleFailure(data: {
+    email:       string;
+    startIso:    string;
+    endIso:      string;
+    sessionType: SessionType;
+    error:       string;
+  }): Promise<void>;
 
   /**
    * Acquires an exclusive slot lock for a time window. Returns false if another
