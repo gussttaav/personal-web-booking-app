@@ -24,6 +24,11 @@ Google Calendar · Zoom Video SDK · Upstash Redis · Gemini · Resend
 - `setTimeout` does NOT work reliably in serverless — use QStash for delays > 10s.
 - Zoom Video SDK != Zoom Meetings API. JWT signing only; no REST for session mgmt.
 - `GOOGLE_PRIVATE_KEY` needs `\\n` → `\n` replacement (already handled in calendar.ts).
+- Supabase TIMESTAMPTZ returns timestamps in a different format than JS `toISOString()`:
+  - JS: `"2026-04-21T10:04:43.130Z"`
+  - PostgREST: `"2026-04-21T10:04:43.13+00:00"`
+  This breaks HMAC verification if the timestamp is part of the payload (e.g. `SupabaseBookingRepository`).
+  **Rule:** always normalize with `new Date(dbTimestamp).toISOString()` before comparing or signing.
 
 ## Commit & Code Documentation Convention
 Each fix gets an ID like `SEC-01`, `PERF-04`, etc. When modifying a file 

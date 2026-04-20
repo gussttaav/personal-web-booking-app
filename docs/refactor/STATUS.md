@@ -54,8 +54,8 @@
 
 | ID | Task | Status | PR | Notes |
 |----|------|--------|----|----|
-| 4.1 | Supabase setup + schema migration | ⬜ Not started | - | Use SQL from PLAN.md §4 |
-| 4.2 | Supabase repository implementations | ⬜ Not started | - | Same interfaces as Redis repos |
+| 4.1 | Supabase setup + schema migration | ✅ Done | - | migrations/0001_initial.sql; 6 tables + RLS + triggers |
+| 4.2 | Supabase repository implementations | ✅ Done | DB-02 | 5 repos + client + types; migrations 0002+0003; 26 integration tests pass; 159 total |
 | 4.3 | Dual-write phase (Redis + Supabase) | ⬜ Not started | - | Run 2–4 weeks |
 | 4.4 | Reconciliation script | ⬜ Not started | - | Daily cron to compare stores |
 | 4.5 | Flip primary to Supabase | ⬜ Not started | - | After reconciliation is clean |
