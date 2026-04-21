@@ -93,4 +93,15 @@ export function validateEnv(): void {
       "Generate one with: openssl rand -hex 32"
     );
   }
+
+  // DB-03: When dual-write is enabled, Supabase credentials are required.
+  if (process.env.ENABLE_DUAL_WRITE === "true") {
+    const dbVars = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"];
+    const missingDb = dbVars.filter((k) => !process.env[k]);
+    if (missingDb.length) {
+      throw new Error(
+        `[startup] ENABLE_DUAL_WRITE=true but missing: ${missingDb.join(", ")}`
+      );
+    }
+  }
 }

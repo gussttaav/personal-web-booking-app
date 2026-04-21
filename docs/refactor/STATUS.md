@@ -56,7 +56,7 @@
 |----|------|--------|----|----|
 | 4.1 | Supabase setup + schema migration | ✅ Done | - | migrations/0001_initial.sql; 6 tables + RLS + triggers |
 | 4.2 | Supabase repository implementations | ✅ Done | DB-02 | 5 repos + client + types; migrations 0002+0003; 26 integration tests pass; 159 total |
-| 4.3 | Dual-write phase (Redis + Supabase) | ⬜ Not started | - | Run 2–4 weeks |
+| 4.3 | Dual-write phase (Redis + Supabase) | ✅ Done | DB-03 | 5 dual-write wrappers; ENABLE_DUAL_WRITE flag; startup check; 26 new tests; 185 total pass |
 | 4.4 | Reconciliation script | ⬜ Not started | - | Daily cron to compare stores |
 | 4.5 | Flip primary to Supabase | ⬜ Not started | - | After reconciliation is clean |
 | 4.6 | Integration test suite | ⬜ Not started | - | Booking flow + payment flow |
