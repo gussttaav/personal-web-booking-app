@@ -104,4 +104,10 @@ export function validateEnv(): void {
       );
     }
   }
+
+  // TEST-02: E2E_MODE must never be enabled in production — it exposes an
+  // unauthenticated auth bypass endpoint (/api/test/auth).
+  if (process.env.NODE_ENV === "production" && process.env.E2E_MODE === "true") {
+    throw new Error("[startup] E2E_MODE must not be enabled in production");
+  }
 }

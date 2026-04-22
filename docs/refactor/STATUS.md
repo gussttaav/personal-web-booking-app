@@ -60,7 +60,7 @@
 | 4.4 | Reconciliation script | ✅ Done | DB-04 | scripts/backfill.ts + scripts/reconcile.ts; tsx added; credits/bookings/audit covered |
 | 4.5 | Flip primary to Supabase | ✅ Done | DB-05 | services/index.ts: 5 DualWrite args swapped; CalendarClient kv.set() → BookingService sessions.createSession(); build + 185 tests pass |
 | 4.6 | Integration test suite | ✅ Done | TEST-01 | 4 integration test files; 11 fixtures (5 in-memory repos + 5 fake clients + services.ts); jest projects config; CI workflow; 24 integration + 187 unit = 211 total pass |
-| 4.7 | E2E test suite (Playwright) | ⬜ Not started | - | Critical user journeys |
+| 4.7 | E2E test suite (Playwright) | ✅ Done | TEST-02 | playwright.config.ts; 6 spec files; loginAs fixture via /api/test/auth bypass; chat mocked (no Gemini cost); E2E_MODE guard; e2e.yml CI workflow; build + 211 tests pass |
 | 4.8 | Sentry integration | ⬜ Not started | - | Error tracking + source maps |
 | 4.9 | Admin dashboard | ⬜ Not started | - | Protected by TUTOR_EMAIL check |
 | 4.10 | Availability caching | ⬜ Not started | - | Tiered TTLs by date distance |
