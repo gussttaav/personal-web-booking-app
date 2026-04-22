@@ -8,7 +8,11 @@
     "start": "next start",
     "lint": "next lint",
     "backfill": "tsx --env-file .env.local scripts/backfill.ts",
-    "reconcile": "tsx --env-file .env.local scripts/reconcile.ts"
+    "reconcile": "tsx --env-file .env.local scripts/reconcile.ts",
+    "test": "jest",
+    "test:unit": "jest --selectProjects unit",
+    "test:integration": "jest --selectProjects integration",
+    "test:ci": "jest --selectProjects unit integration"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^6.2.0",
