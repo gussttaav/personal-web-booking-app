@@ -1,6 +1,9 @@
 // ARCH-13: Maps DomainErrors to HTTP responses so route handlers stay thin.
+// OBS-02: Unexpected (non-domain) errors are captured to Sentry before returning 500.
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { DomainError } from "@/domain/errors";
+import { log } from "@/lib/logger";
 
 const HTTP_STATUS_MAP: Record<string, number> = {
   SLOT_UNAVAILABLE:           409,
@@ -15,10 +18,20 @@ const HTTP_STATUS_MAP: Record<string, number> = {
   CANCEL_TOKEN_CONSUMED:      400,
 };
 
-export function mapDomainErrorToResponse(err: unknown): NextResponse {
+export function mapDomainErrorToResponse(
+  err: unknown,
+  context: Record<string, unknown> = {}
+): NextResponse {
   if (err instanceof DomainError) {
     const status = HTTP_STATUS_MAP[err.code] ?? 400;
     return NextResponse.json({ error: err.message }, { status });
   }
-  throw err;
+
+  // Unexpected error — capture to Sentry with full context before returning 500
+  Sentry.captureException(err, { extra: context });
+  log("error", "Unhandled error in route handler", {
+    ...context,
+    error: String(err),
+  });
+  return NextResponse.json({ error: "Error interno" }, { status: 500 });
 }

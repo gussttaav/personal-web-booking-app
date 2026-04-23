@@ -39,5 +39,8 @@ next-env.d.ts
 .claude
 .swc
 
+# Sentry
+.sentryclirc
+
 # Supabase temporary files
 /supabase/.temp

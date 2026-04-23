@@ -6,6 +6,9 @@
  * log line is indexed and searchable by field — so filtering by service,
  * email, or stripeSessionId in the Vercel dashboard becomes straightforward.
  *
+ * OBS-02: Error-level logs are additionally forwarded to Sentry so that
+ * spikes are visible in the Sentry dashboard and trigger configured alerts.
+ *
  * Output format (one JSON object per line):
  *   {"level":"info","service":"kv","message":"Credits updated","email":"...","ts":"..."}
  *
@@ -19,6 +22,8 @@
  * `| jq .` for readable formatting:
  *   npm run dev 2>&1 | jq .
  */
+
+import * as Sentry from "@sentry/nextjs";
 
 type Level = "info" | "warn" | "error";
 
@@ -48,7 +53,15 @@ export function log(
   // Use the native console method matching the level so Vercel's log
   // viewer correctly colour-codes and categorises each line.
   switch (level) {
-    case "error": console.error(JSON.stringify(entry)); break;
+    case "error":
+      console.error(JSON.stringify(entry));
+      // OBS-02: Forward errors to Sentry for aggregation and alerting
+      Sentry.captureMessage(message, {
+        level: "error",
+        extra: context,
+        tags: { service: String(context.service ?? "unknown") },
+      });
+      break;
     case "warn":  console.warn(JSON.stringify(entry));  break;
     default:      console.log(JSON.stringify(entry));   break;
   }
