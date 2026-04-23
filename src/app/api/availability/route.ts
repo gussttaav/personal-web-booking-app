@@ -1,9 +1,37 @@
+// PERF-10 — Tiered availability caching via Redis; cache hit skips Google API call.
 import { NextRequest, NextResponse } from "next/server";
 import { getAvailableSlots } from "@/infrastructure/google";
 import { SCHEDULE, DAY_SCHEDULES } from "@/lib/booking-config";
 import { availabilityRatelimit } from "@/lib/ratelimit";
 import { getClientIp } from "@/lib/ip-utils";
 import { log } from "@/lib/logger";
+import { getCached, setCached } from "@/lib/availability-cache";
+import type { TimeSlot } from "@/domain/types";
+
+function localizeSlots(slots: TimeSlot[], tz: string, duration: number) {
+  return slots.map(slot => {
+    // If the user is in the same timezone as the server, localLabel === label.
+    if (tz === SCHEDULE.timezone) {
+      return { ...slot, localLabel: slot.label };
+    }
+
+    // Convert start time to the user's local timezone.
+    const startLocal = new Date(slot.start).toLocaleTimeString("es-ES", {
+      timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false,
+    });
+
+    // 15-min slots show only the start time; 1h/2h slots show a start–end range.
+    // This mirrors the label format produced by formatSlotLabel() in calendar.ts.
+    if (duration === 15) {
+      return { ...slot, localLabel: startLocal };
+    }
+
+    const endLocal = new Date(slot.end).toLocaleTimeString("es-ES", {
+      timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false,
+    });
+    return { ...slot, localLabel: `${startLocal}–${endLocal}` };
+  });
+}
 
 export async function GET(req: NextRequest) {
   const ip = getClientIp(req);
@@ -31,32 +59,21 @@ export async function GET(req: NextRequest) {
   if (DAY_SCHEDULES[dow] === null) return NextResponse.json({ slots: [] });
 
   try {
+    const cached = await getCached<{ slots: TimeSlot[] }>(date, duration);
+    if (cached) {
+      log("info", "Availability cache hit", { service: "availability", date, duration });
+      return NextResponse.json({
+        slots: localizeSlots(cached.slots, tz, duration),
+        timezone: SCHEDULE.timezone,
+        cached: true,
+      });
+    }
+
+    log("info", "Availability cache miss", { service: "availability", date, duration });
     const slots = await getAvailableSlots(date, duration);
+    await setCached(date, duration, { slots });
 
-    const withLocalTime = slots.map(slot => {
-      // If the user is in the same timezone as the server, localLabel === label.
-      if (tz === SCHEDULE.timezone) {
-        return { ...slot, localLabel: slot.label };
-      }
-
-      // Convert start time to the user's local timezone.
-      const startLocal = new Date(slot.start).toLocaleTimeString("es-ES", {
-        timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false,
-      });
-
-      // 15-min slots show only the start time; 1h/2h slots show a start–end range.
-      // This mirrors the label format produced by formatSlotLabel() in calendar.ts.
-      if (duration === 15) {
-        return { ...slot, localLabel: startLocal };
-      }
-
-      const endLocal = new Date(slot.end).toLocaleTimeString("es-ES", {
-        timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false,
-      });
-      return { ...slot, localLabel: `${startLocal}–${endLocal}` };
-    });
-
-    return NextResponse.json({ slots: withLocalTime, timezone: SCHEDULE.timezone });
+    return NextResponse.json({ slots: localizeSlots(slots, tz, duration), timezone: SCHEDULE.timezone });
   } catch (err) {
     log("error", "Error fetching slots", { service: "availability", date, error: String(err) });
     return NextResponse.json({ error: "Error al consultar disponibilidad" }, { status: 500 });

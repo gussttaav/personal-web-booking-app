@@ -13,6 +13,7 @@ import { CreditService } from "./CreditService";
 import { DomainError, SlotUnavailableError } from "@/domain/errors";
 import { SCHEDULE } from "@/lib/booking-config";
 import { log } from "@/lib/logger";
+import { invalidate as invalidateAvailability } from "@/lib/availability-cache";
 
 // ─── Input / output types ─────────────────────────────────────────────────────
 
@@ -117,6 +118,7 @@ export class BookingService {
 
       try { await this.calendar.deleteEvent(oldRecord.eventId); } catch {}
       try { await this.sessions.deleteByEventId(oldRecord.eventId); } catch {}
+      await invalidateAvailability(oldRecord.startsAt.slice(0, 10)).catch(() => {});
 
       if (oldRecord.sessionType === "pack") {
         await this.credits.restoreCredit(input.email);
@@ -156,6 +158,7 @@ export class BookingService {
       eventId         = calResult.eventId;
       zoomSessionName = calResult.zoomSessionName;
       zoomPasscode    = calResult.zoomPasscode;
+      await invalidateAvailability(input.startIso.slice(0, 10)).catch(() => {});
     } catch (err) {
       log("error", "Calendar event creation failed", {
         service: "BookingService", email: input.email, startIso: input.startIso, error: String(err),
@@ -266,6 +269,8 @@ export class BookingService {
         "CANCEL_TOKEN_CONSUMED",
       );
     }
+
+    await invalidateAvailability(record.startsAt.slice(0, 10)).catch(() => {});
 
     const isPack   = record.sessionType === "pack";
     const isSingle = record.sessionType === "session1h" || record.sessionType === "session2h";
