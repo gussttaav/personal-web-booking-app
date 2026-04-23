@@ -31,6 +31,7 @@ export default function Navbar() {
   const isLoaded   = status !== "loading";
   const isSignedIn = !!session?.user;
   const user       = session?.user;
+  const isAdmin    = !!session?.user?.isAdmin;
 
   const hasActivePack = !!packSession && packSession.credits > 0;
 
@@ -184,13 +185,13 @@ export default function Navbar() {
 
                     <Link
                       className="flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors"
-                      href="/area-personal"
+                      href={isAdmin ? "/admin" : "/area-personal"}
                       style={{ color: "#bbcabf" }}
                       onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#353437"; (e.currentTarget as HTMLElement).style.color = "#e5e1e4"; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "#bbcabf"; }}
                     >
-                      <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>dashboard</span>
-                      Área personal
+                      <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>{isAdmin ? "admin_panel_settings" : "dashboard"}</span>
+                      {isAdmin ? "Panel de admin" : "Área personal"}
                     </Link>
                     <hr style={{ borderColor: "rgba(60,74,66,0.3)", margin: "6px 0" }} />
                     <button
@@ -308,15 +309,15 @@ export default function Navbar() {
               {/* Nav links */}
               <nav className="px-2">
                 <Link
-                  href="/area-personal"
+                  href={isAdmin ? "/admin" : "/area-personal"}
                   onClick={() => setMobileOpen(false)}
                   className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-colors"
                   style={{ color: "#bbcabf", fontFamily: "var(--font-headline, Manrope), sans-serif", textDecoration: "none" }}
                   onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#1c1b1d"; }}
                   onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                 >
-                  <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>dashboard</span>
-                  Área Personal
+                  <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>{isAdmin ? "admin_panel_settings" : "dashboard"}</span>
+                  {isAdmin ? "Panel de admin" : "Área Personal"}
                 </Link>
 
                 <hr style={{ borderColor: "rgba(255,255,255,0.05)", margin: "4px 0" }} />

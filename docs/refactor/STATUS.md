@@ -62,7 +62,7 @@
 | 4.6 | Integration test suite | ✅ Done | TEST-01 | 4 integration test files; 11 fixtures (5 in-memory repos + 5 fake clients + services.ts); jest projects config; CI workflow; 24 integration + 187 unit = 211 total pass |
 | 4.7 | E2E test suite (Playwright) | ✅ Done | TEST-02 | playwright.config.ts; 6 spec files; loginAs fixture via /api/test/auth bypass; chat mocked (no Gemini cost); E2E_MODE guard; e2e.yml CI workflow; build + 211 tests pass |
 | 4.8 | Sentry integration | ⬜ Not started | - | Error tracking + source maps |
-| 4.9 | Admin dashboard | ⬜ Not started | - | Protected by TUTOR_EMAIL check |
+| 4.9 | Admin dashboard | ✅ Done | ADMIN-01 | isAdmin gate; 7 pages + 4 API routes + 4 components; _data.ts for aggregate queries; 16 new tests; 231 total pass |
 | 4.10 | Availability caching | ⬜ Not started | - | Tiered TTLs by date distance |
 
 **Exit criteria:** Supabase is primary source of truth for persistent data, Redis remains for rate limiting + ephemeral state, test coverage ≥ 70% on services layer.

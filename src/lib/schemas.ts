@@ -53,3 +53,14 @@ export const CheckoutSchema = z.discriminatedUnion("type", [
 export type PackCheckoutInput    = z.infer<typeof PackCheckoutSchema>;
 export type SingleCheckoutInput  = z.infer<typeof SingleCheckoutSchema>;
 export type CheckoutInput        = z.infer<typeof CheckoutSchema>;
+
+// ─── Admin ────────────────────────────────────────────────────────────────────
+
+// ADMIN-01: Credit adjustment by admin — requires a reason for audit attribution.
+export const AdjustCreditsSchema = z.object({
+  action: z.literal("adjust_credits"),
+  amount: z.number().int(),
+  reason: z.string().min(1).max(500),
+});
+
+export type AdjustCreditsInput = z.infer<typeof AdjustCreditsSchema>;
