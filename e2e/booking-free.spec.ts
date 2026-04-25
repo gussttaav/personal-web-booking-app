@@ -6,9 +6,9 @@
  * Flow:
  *   1. Authenticated user lands on the homepage
  *   2. Clicks the "Encuentro inicial" session card
- *   3. Picks a date + first available slot in the weekly calendar
- *   4. Optionally adds a note and confirms
- *   5. Asserts redirect to /reserva-confirmada with success heading
+ *   3. Navigates to the next calendar week (current week may be mostly past)
+ *   4. Clicks the first available slot (1st click = focus), then "Continuar" (select)
+ *   5. Confirms in the review step → asserts inline success ("Volver al inicio" button)
  */
 
 import { test, expect } from "@playwright/test";
@@ -30,21 +30,30 @@ test.describe("Free 15-min session booking", () => {
     // Open the free session calendar
     await page.getByRole("button", { name: /encuentro inicial/i }).click();
 
-    // The booking overlay / calendar should appear
-    // Pick the first available time slot shown in the weekly calendar
+    // Navigate to next week — the current week may be mostly past or within the
+    // minimum-notice window (5 h), leaving no available slots visible.
+    await page.getByRole("button", { name: /semana siguiente/i }).click();
+
+    // Wait for slot buttons to load for the new week.
+    // Availability fetch can take > 15 s on a cold dev server — allow 25 s.
     const firstSlot = page.getByRole("button", { name: /\d{2}:\d{2}/ }).first();
-    await expect(firstSlot).toBeVisible({ timeout: 15_000 });
+    await expect(firstSlot).toBeVisible({ timeout: 25_000 });
+
+    // 1st click → focuses the block in the calendar
     await firstSlot.click();
 
-    // Confirm panel — optionally fill note and submit
+    // "Continuar" appears once a slot is focused; click it to confirm selection
+    await page.getByRole("button", { name: /continuar/i }).click();
+
+    // Review step — confirm the booking
     const confirmBtn = page.getByRole("button", { name: /confirmar/i });
     await expect(confirmBtn).toBeVisible({ timeout: 10_000 });
     await confirmBtn.click();
 
-    // Should redirect to the confirmation page
-    await expect(page).toHaveURL(/\/reserva-confirmada/, { timeout: 30_000 });
+    // Free sessions show success inline — SingleSessionBooking renders the success
+    // state in-place, the URL stays at "/". Assert the "Volver al inicio" button.
     await expect(
-      page.getByRole("heading", { name: /reserva confirmada/i }),
-    ).toBeVisible();
+      page.getByRole("button", { name: /volver al inicio/i }),
+    ).toBeVisible({ timeout: 30_000 });
   });
 });

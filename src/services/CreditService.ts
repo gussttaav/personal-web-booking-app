@@ -60,6 +60,10 @@ export class CreditService {
     return { remaining: result.remaining };
   }
 
+  async hasProcessedPayment(stripeSessionId: string): Promise<boolean> {
+    return this.credits.hasProcessedPayment(stripeSessionId);
+  }
+
   async restoreCredit(email: string): Promise<{ credits: number }> {
     const result = await this.credits.restoreCredit(email);
     // ok=false means no active pack; silently succeed with credits=0

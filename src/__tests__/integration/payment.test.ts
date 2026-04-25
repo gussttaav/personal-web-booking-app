@@ -9,6 +9,10 @@ jest.mock("@/infrastructure/google", () => ({
   getAvailableSlots: jest.fn().mockRejectedValue(new Error("no credentials in test")),
 }));
 
+// Prevent writeDeadLetter from firing real Resend API calls when NOTIFY_EMAIL
+// and RESEND_API_KEY are set in the local environment.
+global.fetch = jest.fn().mockResolvedValue({});
+
 import { InMemoryCreditsRepository } from "../fixtures/InMemoryCreditsRepository";
 import { FakeCalendarClient }        from "../fixtures/FakeCalendarClient";
 import { InMemoryPaymentRepository } from "../fixtures/InMemoryPaymentRepository";

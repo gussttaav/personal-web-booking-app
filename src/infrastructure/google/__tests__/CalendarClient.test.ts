@@ -29,14 +29,21 @@ beforeEach(() => {
 const TEST_DATE = "2099-12-01";
 
 describe("getAvailableSlots — stepMinutes parameter", () => {
-  it("generates only whole-hour starts by default (step equals duration)", async () => {
+  it("consecutive slot starts are at least durationMinutes apart by default (step equals duration)", async () => {
     const slots = await getAvailableSlots(TEST_DATE, 60);
 
     expect(slots.length).toBeGreaterThan(0);
-    // Madrid offsets are always whole hours (+1 or +2), so UTC minutes
-    // mirror Madrid minutes exactly.
-    const allOnHour = slots.every(s => new Date(s.start).getUTCMinutes() === 0);
-    expect(allOnHour).toBe(true);
+    // When step == duration, no two consecutive slot starts can be closer
+    // than 60 min apart — there are no intermediate half-hour subdivisions.
+    // (The afternoon window starts at 15:30, so some slots begin on the half-hour,
+    // but that is the window origin, not an intermediate step.)
+    const starts = slots
+      .map(s => new Date(s.start).getTime())
+      .sort((a, b) => a - b);
+    for (let i = 1; i < starts.length; i++) {
+      const diffMin = (starts[i]! - starts[i - 1]!) / 60_000;
+      expect(diffMin).toBeGreaterThanOrEqual(60);
+    }
   });
 
   it("includes half-hour starts when stepMinutes=30", async () => {

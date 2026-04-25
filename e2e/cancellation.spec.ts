@@ -69,7 +69,7 @@ test.describe("Cancellation via email link", () => {
     // Success state
     await expect(
       page.getByRole("heading", { name: /reserva cancelada/i }),
-    ).toBeVisible({ timeout: 15_000 });
+    ).toBeVisible({ timeout: 30_000 });
   });
 
   test("shows error state for an invalid cancel token", async ({ page }) => {

@@ -16,6 +16,19 @@
 #     - Required GitHub secrets: STRIPE_WEBHOOK_SECRET_TEST (the whsec_... from
 #       the webhook endpoint you registered in the Stripe dashboard for that URL)
 #
+#   ── To enable Vercel preview mode ───────────────────────────────────────────
+#   Currently NOT active (E2E_BASE_URL is unset → local server mode is used).
+#   To switch, do all four steps:
+#     1. In Vercel dashboard: ensure the preview deployment runs BEFORE this job
+#        (add a `needs: deploy` dependency or use a separate workflow triggered
+#        by the Vercel deployment webhook).
+#     2. In Stripe dashboard: create a webhook endpoint pointing to
+#        https://<your-preview-domain>/api/stripe/webhook, copy the whsec_...
+#     3. Add GitHub secret E2E_BASE_URL = https://<your-preview-domain>
+#     4. Add GitHub secret STRIPE_WEBHOOK_SECRET_TEST = whsec_... (from step 2)
+#        and remove STRIPE_API_KEY_TEST (no longer needed without the CLI)
+#   ────────────────────────────────────────────────────────────────────────────
+#
 # ── Full list of required GitHub secrets ─────────────────────────────────────
 #
 #   Always required:
@@ -33,6 +46,9 @@
 #     QSTASH_TOKEN, QSTASH_CURRENT_SIGNING_KEY, QSTASH_NEXT_SIGNING_KEY
 #     ADMIN_EMAILS
 #     SUPABASE_URL_TEST, SUPABASE_SERVICE_ROLE_KEY_TEST
+#     SUPABASE_DB_URL_TEST          (postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres)
+#                                   Settings → Database → Connection pooling → Session mode
+#                                   (session-mode pooler — IPv4, supports DDL migrations)
 #
 #   Local server mode only:
 #     STRIPE_API_KEY_TEST           (sk_test_... — used by the Stripe CLI)
@@ -63,6 +79,14 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Apply migrations to test database
+        run: supabase db push --db-url "${{ secrets.SUPABASE_DB_URL_TEST }}"
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium

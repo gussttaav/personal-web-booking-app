@@ -6,17 +6,6 @@ export type PackSize = 5 | 10;
 
 export type SessionType = "free15min" | "session1h" | "session2h" | "pack";
 
-export interface CreditRecord {
-  email:           string;
-  name:            string;
-  credits:         number;
-  packLabel:       string;
-  packSize:        PackSize | null;
-  expiresAt:       string;       // ISO
-  lastUpdated:     string;       // ISO
-  stripeSessionId: string;
-}
-
 export interface BookingRecord {
   eventId:      string;
   email:        string;

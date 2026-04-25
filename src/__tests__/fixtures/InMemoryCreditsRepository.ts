@@ -80,4 +80,8 @@ export class InMemoryCreditsRepository implements ICreditsRepository {
     rec.lastUpdated = new Date().toISOString();
     return { ok: true, credits: rec.credits };
   }
+
+  async hasProcessedPayment(stripeSessionId: string): Promise<boolean> {
+    return this.usedIds.has(stripeSessionId);
+  }
 }

@@ -27,7 +27,7 @@ export interface ICreditsRepository {
   /**
    * Atomically decrements credit by 1. Returns ok=false (with remaining=0) if
    * the user has no credits, the pack is expired, or the user doesn't exist.
-   * Uses a Lua script to prevent TOCTOU races under concurrent booking requests.
+   * Uses a Postgres stored procedure (decrement_credit) to prevent TOCTOU races.
    */
   decrementCredit(email: string): Promise<{ ok: boolean; remaining: number }>;
 
@@ -36,4 +36,11 @@ export interface ICreditsRepository {
    * Returns ok=false if the user has no credit record (should not normally occur).
    */
   restoreCredit(email: string): Promise<{ ok: boolean; credits: number }>;
+
+  /**
+   * Returns true if a credit_pack row with this stripeSessionId already exists.
+   * Used by the SSE endpoint to detect when the webhook has finished processing
+   * a pack payment, without polling Redis.
+   */
+  hasProcessedPayment(stripeSessionId: string): Promise<boolean>;
 }

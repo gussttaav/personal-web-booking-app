@@ -4,10 +4,8 @@
  * POST — send a chat message scoped to a live Zoom session.
  * GET  — SSE stream of chat messages for a session.
  *
- * Redis schema:
- *   Key:  chat:session:{eventId}   (Redis list)
- *   Val:  JSON-serialised ChatMessage objects
- *   TTL:  86 400 s (24 h) — set on first push
+ * Storage: chat messages are persisted in the Supabase `session_messages` table
+ * via SessionService → SupabaseSessionRepository (not Redis).
  *
  * SSE resumption uses the standard `Last-Event-ID` header:
  *   - Each streamed message carries `id: {index}`.

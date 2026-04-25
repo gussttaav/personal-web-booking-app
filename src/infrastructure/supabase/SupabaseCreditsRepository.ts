@@ -91,6 +91,14 @@ export class SupabaseCreditsRepository implements ICreditsRepository {
     return data as { ok: boolean; credits: number };
   }
 
+  async hasProcessedPayment(stripeSessionId: string): Promise<boolean> {
+    const { count } = await supabase
+      .from("credit_packs")
+      .select("id", { count: "exact", head: true })
+      .eq("stripe_payment_id", stripeSessionId);
+    return (count ?? 0) > 0;
+  }
+
   private async findUserId(email: string): Promise<string | null> {
     const { data } = await supabase
       .from("users")

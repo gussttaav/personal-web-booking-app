@@ -9,9 +9,10 @@
  *   2. Navigates to /?reschedule=free15min&token=<cancelToken>
  *      (this is the URL format injected by confirmation email links)
  *   3. The useRescheduleIntent hook fires, activating the reschedule flow
- *   4. The session picker / booking overlay opens automatically
- *   5. User picks a new slot and confirms
- *   6. Asserts redirect to /reserva-confirmada
+ *   4. The weekly calendar opens; user picks a new slot:
+ *        - 1st click → focuses the block (fires onSlotFocused)
+ *        - "Continuar" click → confirms selection (fires onSlotSelected)
+ *   5. Asserts inline success state ("Volver al inicio" button visible)
  */
 
 import { test, expect } from "@playwright/test";
@@ -57,21 +58,27 @@ test.describe("Reschedule existing booking", () => {
     // The hook reads ?reschedule=free15min&token=<cancelToken> and opens the picker.
     await page.goto(`/?reschedule=free15min&token=${encodeURIComponent(cancelToken)}`);
 
-    // The reschedule intent hook fires and the weekly calendar or session picker opens.
-    // Wait for a slot to appear (calendar rendered in the booking overlay).
+    // The reschedule calendar opens — navigate to next week so the already-booked
+    // slot (tomorrow) is in a different week and more future slots are visible.
+    await page.getByRole("button", { name: /semana siguiente/i }).click();
+
+    // Wait for slot buttons to load for the new week
     const firstSlot = page.getByRole("button", { name: /\d{2}:\d{2}/ }).first();
     await expect(firstSlot).toBeVisible({ timeout: 20_000 });
-    await firstSlot.click();
 
-    // Confirm the reschedule
+    // 1st click focuses the slot; "Continuar" confirms the selection
+    await firstSlot.click();
+    await page.getByRole("button", { name: /continuar/i }).click();
+
+    // Review step: confirm the reschedule
     const confirmBtn = page.getByRole("button", { name: /confirmar/i });
     await expect(confirmBtn).toBeVisible({ timeout: 10_000 });
     await confirmBtn.click();
 
-    // Should reach the confirmation page
-    await expect(page).toHaveURL(/\/reserva-confirmada/, { timeout: 30_000 });
+    // Rescheduled free sessions show success inline — the URL stays at "/".
+    // SingleSessionBooking renders phase="success" with a "Volver al inicio" button.
     await expect(
-      page.getByRole("heading", { name: /reserva confirmada/i }),
-    ).toBeVisible();
+      page.getByRole("button", { name: /volver al inicio/i }),
+    ).toBeVisible({ timeout: 30_000 });
   });
 });

@@ -3,13 +3,13 @@
  *
  * Server-Sent Events endpoint.
  * The browser connects here after a successful embedded payment and waits
- * for the webhook to write the credit record to KV.
+ * for the webhook to write the credit record to Supabase.
  *
  * Flow:
  *   1. Browser opens  GET /api/sse?payment_intent_id=pi_xxx
  *   2. Server verifies the authenticated user owns this PaymentIntent
- *   3. Server polls KV for up to MAX_WAIT_MS (24s) with fixed interval
- *   4. Webhook (POST /api/stripe/webhook) writes credits to KV
+ *   3. Server polls Supabase for up to MAX_WAIT_MS (24s) with fixed interval
+ *   4. Webhook (POST /api/stripe/webhook) writes credits to Supabase
  *   5. Server detects the record and streams `event: credits_ready` to browser
  *   6. Browser closes the connection
  *
@@ -23,8 +23,7 @@
 import { NextRequest } from "next/server";
 import Stripe from "stripe";
 import { auth } from "@/auth";
-import type { CreditRecord } from "@/domain/types";
-import { kv } from "@/infrastructure/redis/client";
+import { creditService } from "@/services";
 
 // Maximum time to hold the SSE connection open (Vercel max is 25s on hobby,
 // use 24s to stay safely under). Upgrade to a longer timeout on Pro.
@@ -47,7 +46,7 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Auth gate ─────────────────────────────────────────────────────────────────
-  // Verify the caller is authenticated before touching Stripe or KV.
+  // Verify the caller is authenticated before touching Stripe or the DB.
   const authSession = await auth();
   if (!authSession?.user?.email) {
     return new Response("Authentication required", { status: 401 });
@@ -81,8 +80,6 @@ export async function GET(req: NextRequest) {
     return new Response("Forbidden", { status: 403 });
   }
 
-  const kvKey = `credits:${email.toLowerCase().trim()}`;
-
   // ── Build the SSE stream ──────────────────────────────────────────────────────
   const encoder = new TextEncoder();
 
@@ -102,22 +99,22 @@ export async function GET(req: NextRequest) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
 
         try {
-          const record = await kv.get<CreditRecord>(kvKey);
+          // Poll Supabase: the webhook writes a credit_packs row identified by
+          // stripe_payment_id. Once it exists, the payment has been processed.
+          const processed = await creditService.hasProcessedPayment(paymentIntentId);
 
-          // Credits are ready when the webhook has written the record with the
-          // matching paymentIntentId (ensures we're not reading stale data from
-          // a previous purchase).
-          if (record && record.stripeSessionId === paymentIntentId && record.credits > 0) {
+          if (processed) {
+            const balance = await creditService.getBalance(email);
             send("credits_ready", {
-              credits:  record.credits,
-              name:     record.name ?? name,
-              packSize: record.packSize ?? packSize,
+              credits:  balance?.credits  ?? packSize,
+              name:     balance?.name     ?? name,
+              packSize: balance?.packSize ?? packSize,
             });
             controller.close();
             return;
           }
         } catch {
-          // KV read failed — keep trying until deadline
+          // DB read failed — keep trying until deadline
         }
       }
 
