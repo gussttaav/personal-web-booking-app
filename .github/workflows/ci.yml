@@ -35,9 +35,11 @@ jobs:
         env:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL_TEST }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY_TEST }}
+          CANCEL_SECRET:             ${{ secrets.CANCEL_SECRET }}
 
       - name: Integration tests
         run: npm run test:integration
         env:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL_TEST }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY_TEST }}
+          CANCEL_SECRET:             ${{ secrets.CANCEL_SECRET }}
