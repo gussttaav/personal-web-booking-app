@@ -7,7 +7,7 @@
 #     - Stripe CLI is installed; `stripe listen --print-secret` captures the
 #       webhook signing secret dynamically and writes it to STRIPE_WEBHOOK_SECRET
 #       in the job environment — no need to store it as a GitHub secret
-#     - Required GitHub secrets: STRIPE_API_KEY_TEST (your sk_test_... key)
+#     - Required GitHub secrets: STRIPE_SECRET_KEY_TEST (your sk_test_... key)
 #
 #   VERCEL PREVIEW MODE  (E2E_BASE_URL secret IS set)
 #     - Tests run against an already-deployed Vercel preview URL
@@ -26,7 +26,7 @@
 #        https://<your-preview-domain>/api/stripe/webhook, copy the whsec_...
 #     3. Add GitHub secret E2E_BASE_URL = https://<your-preview-domain>
 #     4. Add GitHub secret STRIPE_WEBHOOK_SECRET_TEST = whsec_... (from step 2)
-#        and remove STRIPE_API_KEY_TEST (no longer needed without the CLI)
+#        and remove STRIPE_SECRET_KEY_TEST (no longer needed without the CLI)
 #   ────────────────────────────────────────────────────────────────────────────
 #
 # ── Full list of required GitHub secrets ─────────────────────────────────────
@@ -51,7 +51,7 @@
 #                                   (session-mode pooler — IPv4, supports DDL migrations)
 #
 #   Local server mode only:
-#     STRIPE_API_KEY_TEST           (sk_test_... — used by the Stripe CLI)
+#     STRIPE_SECRET_KEY_TEST           (sk_test_... — used by the Stripe CLI)
 #
 #   Vercel preview mode only:
 #     E2E_BASE_URL                  (https://your-preview.vercel.app)
@@ -116,14 +116,14 @@ jobs:
       - name: Capture Stripe webhook signing secret
         if: ${{ !env.E2E_BASE_URL }}
         run: |
-          SECRET=$(stripe listen --print-secret --api-key "${{ secrets.STRIPE_API_KEY_TEST }}")
+          SECRET=$(stripe listen --print-secret --api-key "${{ secrets.STRIPE_SECRET_KEY_TEST }}")
           echo "STRIPE_WEBHOOK_SECRET=$SECRET" >> "$GITHUB_ENV"
 
       - name: Start Stripe webhook listener
         if: ${{ !env.E2E_BASE_URL }}
         run: |
           stripe listen \
-            --api-key "${{ secrets.STRIPE_API_KEY_TEST }}" \
+            --api-key "${{ secrets.STRIPE_SECRET_KEY_TEST }}" \
             --forward-to localhost:3000/api/stripe/webhook &
           echo "STRIPE_LISTENER_PID=$!" >> "$GITHUB_ENV"
 
