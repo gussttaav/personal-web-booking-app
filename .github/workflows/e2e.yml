@@ -170,6 +170,7 @@ jobs:
           ADMIN_EMAILS:                  ${{ secrets.ADMIN_EMAILS }}
           SUPABASE_URL:                  ${{ secrets.SUPABASE_URL_TEST }}
           SUPABASE_SERVICE_ROLE_KEY:     ${{ secrets.SUPABASE_SERVICE_ROLE_KEY_TEST }}
+          SUPABASE_DB_URL:               ${{ secrets.SUPABASE_DB_URL_TEST }}
 
       # ── Cleanup ─────────────────────────────────────────────────────────────
 
