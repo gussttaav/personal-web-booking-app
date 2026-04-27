@@ -106,6 +106,23 @@ function getMadridMinutes(): number {
   return parseInt(h, 10) * 60 + parseInt(m, 10);
 }
 
+/** Classify a time row into its visual hierarchy tier. */
+function getTimeRowHierarchy(hhmm: string): "hour" | "half" | "quarter" {
+  const mins = hhmm.split(":")[1] ?? "00";
+  if (mins === "00") return "hour";
+  if (mins === "30") return "half";
+  return "quarter";
+}
+
+/** Border style for a grid row based on its position and time hierarchy. */
+function rowBorderTop(i: number, hhmm: string): string | undefined {
+  if (i === 0) return undefined;
+  const h = getTimeRowHierarchy(hhmm);
+  if (h === "hour")  return "1px solid rgba(255,255,255,0.10)";
+  if (h === "half")  return "1px solid rgba(255,255,255,0.045)";
+  return                    "1px solid rgba(255,255,255,0.022)";
+}
+
 /** Build "HH:MM" time rows for the grid. */
 function buildTimeRows(atomicMins: 15 | 30): string[] {
   const rows: string[] = [];
@@ -401,8 +418,9 @@ export default function WeeklyCalendar({
   const today   = new Date(); today.setHours(0, 0, 0, 0);
   const maxDate = new Date(); maxDate.setDate(maxDate.getDate() + SCHEDULE.bookingWindowWeeks * 7);
 
-  const ROW_H    = isMobile ? 40 : 48;
+  const ROW_H    = isMobile ? 28 : 34;
   const HEADER_H = isMobile ? 52 : 64;
+  const HOUR_GAP = 5; // extra top margin before each hour boundary row
 
   // Current-time indicator line — only shown on the current week and within grid range
   const GRID_START_MIN = 9 * 60;   // 09:00
@@ -536,23 +554,35 @@ export default function WeeklyCalendar({
                   key={hhmm}
                   style={{
                     height:         ROW_H,
+                    marginTop:      i > 0 && getTimeRowHierarchy(hhmm) === "hour" ? HOUR_GAP : 0,
                     display:        "flex",
                     alignItems:     "flex-start",
                     justifyContent: "flex-end",
                     paddingRight:   8,
                     paddingTop:     4,
-                    borderTop:      i > 0 ? "1px solid rgba(255,255,255,0.04)" : undefined,
+                    borderTop: rowBorderTop(i, hhmm),
                   }}
                 >
-                  <span style={{
-                    fontSize:           isMobile ? 8 : 9,
-                    fontWeight:         500,
-                    color:              "#86948a",
-                    fontVariantNumeric: "tabular-nums",
-                    whiteSpace:         "nowrap",
-                  }}>
-                    {hhmm}
-                  </span>
+                  {(() => {
+                    const tier = getTimeRowHierarchy(hhmm);
+                    return (
+                      <span style={{
+                        fontSize:           isMobile
+                          ? (tier === "hour" ? 9 : tier === "half" ? 7.5 : 7)
+                          : (tier === "hour" ? 10 : tier === "half" ? 8.5 : 8),
+                        fontWeight:         tier === "hour" ? 600 : 400,
+                        color:              tier === "hour"
+                          ? "#a0b0a8"
+                          : tier === "half"
+                            ? "rgba(134,148,138,0.6)"
+                            : "rgba(134,148,138,0.38)",
+                        fontVariantNumeric: "tabular-nums",
+                        whiteSpace:         "nowrap",
+                      }}>
+                        {hhmm}
+                      </span>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
@@ -637,11 +667,14 @@ export default function WeeklyCalendar({
 
                   {/* Time rows */}
                   {timeRows.map((hhmm, i) => {
+                    const isHourBoundary = i > 0 && getTimeRowHierarchy(hhmm) === "hour";
+
                     if (isClosed) {
                       return (
                         <div key={hhmm} style={{
                           height:    ROW_H,
-                          borderTop: i > 0 ? "1px solid rgba(255,255,255,0.03)" : undefined,
+                          marginTop: isHourBoundary ? HOUR_GAP : 0,
+                          borderTop: rowBorderTop(i, hhmm),
                         }} />
                       );
                     }
@@ -650,7 +683,8 @@ export default function WeeklyCalendar({
                       return (
                         <div key={hhmm} style={{
                           height:         ROW_H,
-                          borderTop:      i > 0 ? "1px solid rgba(255,255,255,0.03)" : undefined,
+                          marginTop:      isHourBoundary ? HOUR_GAP : 0,
+                          borderTop:      rowBorderTop(i, hhmm),
                           display:        hhmm === "10:00" ? "flex" : undefined,
                           alignItems:     "center",
                           justifyContent: "center",
@@ -703,7 +737,8 @@ export default function WeeklyCalendar({
                       return (
                         <div key={hhmm} style={{
                           height:    ROW_H,
-                          borderTop: i > 0 ? "1px solid rgba(255,255,255,0.03)" : undefined,
+                          marginTop: isHourBoundary ? HOUR_GAP : 0,
+                          borderTop: rowBorderTop(i, hhmm),
                         }} />
                       );
                     }
@@ -711,12 +746,12 @@ export default function WeeklyCalendar({
                     return (
                       <div key={hhmm} style={{
                         height:    ROW_H,
-                        padding:   "3px 3px",
-                        borderTop: i > 0 ? "1px solid rgba(255,255,255,0.04)" : undefined,
+                        marginTop: isHourBoundary ? HOUR_GAP : 0,
+                        padding:   "2px 3px",
+                        borderTop: rowBorderTop(i, hhmm),
                       }}>
                         <SlotCell
                           state={cellState}
-                          timeLabel={isMobile ? null : hhmm}
                           inSel={inSel}
                           isSelTop={isSelTop}
                           isSelBot={isSelBot}
@@ -758,23 +793,21 @@ export default function WeeklyCalendar({
 
 function SlotCell({
   state,
-  timeLabel,
   inSel, isSelTop, isSelBot,
   inFocus, isFocusAnchor, isFocusTop, isFocusBot,
   isInvalid,
   onClick,
 }: {
-  state:        "available" | "booked" | "unavailable";
-  timeLabel:    string | null;
-  inSel:        boolean;
-  isSelTop:     boolean;
-  isSelBot:     boolean;
-  inFocus:      boolean;
+  state:         "available" | "booked" | "unavailable";
+  inSel:         boolean;
+  isSelTop:      boolean;
+  isSelBot:      boolean;
+  inFocus:       boolean;
   isFocusAnchor: boolean;
-  isFocusTop:   boolean;
-  isFocusBot:   boolean;
-  isInvalid:    boolean;
-  onClick?:     () => void;
+  isFocusTop:    boolean;
+  isFocusBot:    boolean;
+  isInvalid:     boolean;
+  onClick?:      () => void;
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -851,21 +884,9 @@ function SlotCell({
         fontFamily:     "inherit",
         overflow:       "hidden",
       }}
-      aria-label={timeLabel ? `Disponible a las ${timeLabel}` : "Hora disponible"}
-    >
-      {timeLabel && (
-        <span style={{
-          fontSize:      8,
-          fontWeight:    500,
-          color:         labelColor,
-          whiteSpace:    "nowrap",
-          pointerEvents: "none",
-          lineHeight:    1,
-        }}>
-          {timeLabel}
-        </span>
-      )}
-    </button>
+      aria-label="Hora disponible"
+    />
+
   );
 }
 
