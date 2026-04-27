@@ -1,5 +1,6 @@
 export interface UserBooking {
   token:       string;
+  joinToken:   string;
   sessionType: "free15min" | "session1h" | "session2h" | "pack";
   startsAt:    string;   // ISO 8601
   endsAt:      string;   // ISO 8601

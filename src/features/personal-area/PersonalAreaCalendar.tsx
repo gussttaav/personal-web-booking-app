@@ -246,7 +246,7 @@ const ContextMenu = forwardRef<HTMLDivElement, ContextMenuProps>(
             {fmtTime(booking.startsAt)} – {fmtTime(booking.endsAt)}
           </p>
         </div>
-        <CMenuItem icon="play_circle"  label="Entrar al aula"  color="#4edea3" onClick={() => { onClose(); window.location.href = `/sesion/${booking.token}`; }} />
+        <CMenuItem icon="play_circle"  label="Entrar al aula"  color="#4edea3" onClick={() => { onClose(); window.location.href = `/sesion/${booking.joinToken}`; }} />
         <CMenuItem icon="event_repeat" label="Reprogramar"     color="#e5e1e4" onClick={() => { onClose(); router.push(`/?reschedule=${booking.sessionType}&token=${booking.token}`); }} />
         <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "4px 0" }} />
         <CMenuItem icon="cancel"       label="Cancelar"        color="#ffb4ab" onClick={() => setPhase("confirm")} />

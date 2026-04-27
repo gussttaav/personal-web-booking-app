@@ -41,9 +41,9 @@ export interface IBookingRepository {
   /**
    * Returns all active (non-cancelled, future) bookings for a user, ordered by
    * start time ascending. Returns an empty array if the user has no bookings.
-   * Each entry includes the cancel token (the Redis key) alongside the record.
+   * Each entry includes both tokens alongside the record.
    */
-  listByUser(email: string): Promise<{ cancelToken: string; record: BookingRecord }[]>;
+  listByUser(email: string): Promise<{ cancelToken: string; joinToken: string; record: BookingRecord }[]>;
 
   /**
    * Persists a failed reschedule attempt to the dead-letter store so it can be

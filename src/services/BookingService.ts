@@ -45,6 +45,7 @@ export interface CancelByTokenOutput {
 
 export interface UserBooking {
   token:       string;
+  joinToken:   string;
   sessionType: SessionType;
   startsAt:    string;
   endsAt:      string;
@@ -324,8 +325,9 @@ export class BookingService {
 
   async listForUser(email: string): Promise<UserBooking[]> {
     const entries = await this.bookings.listByUser(email);
-    return entries.map(({ cancelToken, record }) => ({
+    return entries.map(({ cancelToken, joinToken, record }) => ({
       token:       cancelToken,
+      joinToken,
       sessionType: record.sessionType,
       startsAt:    record.startsAt,
       endsAt:      record.endsAt,

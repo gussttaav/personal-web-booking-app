@@ -140,7 +140,7 @@ export class SupabaseBookingRepository implements IBookingRepository {
 
   async listByUser(
     email: string,
-  ): Promise<{ cancelToken: string; record: BookingRecord }[]> {
+  ): Promise<{ cancelToken: string; joinToken: string; record: BookingRecord }[]> {
     const normalized = email.toLowerCase().trim();
 
     const { data: user } = await supabase
@@ -153,7 +153,7 @@ export class SupabaseBookingRepository implements IBookingRepository {
 
     const { data, error } = await supabase
       .from("bookings")
-      .select("calendar_event_id, session_type, starts_at, ends_at, cancel_token, credit_pack_id")
+      .select("calendar_event_id, session_type, starts_at, ends_at, cancel_token, join_token, credit_pack_id")
       .eq("user_id", user.id)
       .eq("status", "confirmed")
       .order("starts_at", { ascending: true });
@@ -165,6 +165,7 @@ export class SupabaseBookingRepository implements IBookingRepository {
         const packSize = await this.getPackSize(row.credit_pack_id);
         return {
           cancelToken: row.cancel_token as string,
+          joinToken:   row.join_token as string,
           record: {
             eventId:     (row.calendar_event_id ?? "") as string,
             email:       normalized,

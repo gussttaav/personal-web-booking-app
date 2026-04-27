@@ -395,6 +395,7 @@ describe("BookingService.listForUser", () => {
     bookings.listByUser.mockResolvedValue([
       {
         cancelToken: "tkn1",
+        joinToken:   "jtkn1",
         record: {
           eventId: "e1", email: "s@t.com", name: "S",
           sessionType: "pack", startsAt: hoursFromNow(5), endsAt: hoursFromNow(6),
@@ -409,6 +410,7 @@ describe("BookingService.listForUser", () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
       token:       "tkn1",
+      joinToken:   "jtkn1",
       sessionType: "pack",
       packSize:    5,
     });
