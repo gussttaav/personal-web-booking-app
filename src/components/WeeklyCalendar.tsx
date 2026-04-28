@@ -420,7 +420,7 @@ export default function WeeklyCalendar({
 
   const ROW_H    = isMobile ? 28 : 34;
   const HEADER_H = isMobile ? 52 : 64;
-  const HOUR_GAP = 5; // extra top margin before each hour boundary row
+  const HOUR_GAP = 3; // extra top margin before each hour boundary row
 
   // Current-time indicator line — only shown on the current week and within grid range
   const GRID_START_MIN = 9 * 60;   // 09:00

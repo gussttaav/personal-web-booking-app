@@ -67,6 +67,7 @@ interface CheckoutFormProps {
 function CheckoutForm({ onSuccess, onCancel }: CheckoutFormProps) {
   const stripe   = useStripe();
   const elements = useElements();
+  const [ready,      setReady]      = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error,      setError]      = useState("");
 
@@ -94,33 +95,49 @@ function CheckoutForm({ onSuccess, onCancel }: CheckoutFormProps) {
 
   return (
     <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <PaymentElement />
+      <PaymentElement
+        onReady={() => setReady(true)}
+        options={{
+          wallets: { link: "never" },
+          fields: {
+            billingDetails: { email: "never", phone: "never", name: "never" },
+          },
+        }}
+      />
 
       {error && <Alert variant="error">{error}</Alert>}
 
-      <button
-        type="submit"
-        disabled={!stripe || !elements || processing}
-        style={{
-          ...primaryBtnStyle,
-          opacity: (!stripe || !elements || processing) ? 0.7 : 1,
-          cursor:  (!stripe || !elements || processing) ? "not-allowed" : "pointer",
-        }}
-      >
-        {processing ? "Procesando..." : "Pagar"}
-      </button>
+      {!ready ? (
+        <p style={{ textAlign: "center", color: "#bbcabf", fontSize: 14 }}>
+          Cargando formulario de pago...
+        </p>
+      ) : (
+        <>
+          <button
+            type="submit"
+            disabled={processing}
+            style={{
+              ...primaryBtnStyle,
+              opacity: processing ? 0.7 : 1,
+              cursor:  processing ? "not-allowed" : "pointer",
+            }}
+          >
+            {processing ? "Procesando..." : "Pagar"}
+          </button>
 
-      <button
-        type="button"
-        onClick={onCancel}
-        disabled={processing}
-        style={{
-          ...secondaryBtnStyle,
-          opacity: processing ? 0.5 : 1,
-        }}
-      >
-        Cancelar
-      </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={processing}
+            style={{
+              ...secondaryBtnStyle,
+              opacity: processing ? 0.5 : 1,
+            }}
+          >
+            Cancelar
+          </button>
+        </>
+      )}
     </form>
   );
 }
