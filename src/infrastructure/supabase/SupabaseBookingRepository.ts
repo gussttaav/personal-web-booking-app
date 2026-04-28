@@ -28,14 +28,15 @@ export class SupabaseBookingRepository implements IBookingRepository {
     const joinToken     = signToken(joinPayload);
 
     const { error } = await supabase.from("bookings").insert({
-      user_id:           userId,
-      session_type:      record.sessionType,
-      starts_at:         record.startsAt,
-      ends_at:           record.endsAt,
-      status:            "confirmed",
-      calendar_event_id: record.eventId,
-      cancel_token:      cancelToken,
-      join_token:        joinToken,
+      user_id:            userId,
+      session_type:       record.sessionType,
+      starts_at:          record.startsAt,
+      ends_at:            record.endsAt,
+      status:             "confirmed",
+      calendar_event_id:  record.eventId,
+      cancel_token:       cancelToken,
+      join_token:         joinToken,
+      ...(record.stripePaymentId ? { stripe_payment_id: record.stripePaymentId } : {}),
     });
 
     if (error) throw error;

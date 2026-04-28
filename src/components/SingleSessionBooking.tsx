@@ -235,6 +235,8 @@ export default function SingleSessionBooking({
           </p>
           <PaymentForm
             clientSecret={clientSecret}
+            studentName={userName}
+            studentEmail={userEmail}
             onSuccess={(paymentIntentId) =>
               router.push(`/sesion-confirmada?payment_intent_id=${paymentIntentId}`)
             }

@@ -7,14 +7,15 @@ export type PackSize = 5 | 10;
 export type SessionType = "free15min" | "session1h" | "session2h" | "pack";
 
 export interface BookingRecord {
-  eventId:      string;
-  email:        string;
-  name:         string;
-  sessionType:  SessionType;
-  startsAt:     string;
-  endsAt:       string;
-  used:         boolean;
-  packSize?:    number;
+  eventId:          string;
+  email:            string;
+  name:             string;
+  sessionType:      SessionType;
+  startsAt:         string;
+  endsAt:           string;
+  used:             boolean;
+  packSize?:        number;
+  stripePaymentId?: string;
 }
 
 export interface ZoomSession {

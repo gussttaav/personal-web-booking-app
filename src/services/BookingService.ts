@@ -18,14 +18,15 @@ import { invalidate as invalidateAvailability } from "@/lib/availability-cache";
 // ─── Input / output types ─────────────────────────────────────────────────────
 
 export interface CreateBookingInput {
-  email:            string;
-  name:             string;
-  startIso:         string;
-  endIso:           string;
-  sessionType:      SessionType;
-  note?:            string;
-  timezone?:        string;
-  rescheduleToken?: string;
+  email:             string;
+  name:              string;
+  startIso:          string;
+  endIso:            string;
+  sessionType:       SessionType;
+  note?:             string;
+  timezone?:         string;
+  rescheduleToken?:  string;
+  stripePaymentId?:  string;
 }
 
 export interface CreateBookingOutput {
@@ -195,7 +196,8 @@ export class BookingService {
       sessionType: input.sessionType,
       startsAt:    input.startIso,
       endsAt:      input.endIso,
-      ...(packSizeForToken !== undefined ? { packSize: packSizeForToken } : {}),
+      ...(packSizeForToken    !== undefined ? { packSize:        packSizeForToken    } : {}),
+      ...(input.stripePaymentId             ? { stripePaymentId: input.stripePaymentId } : {}),
     });
 
     // 8. Persist Zoom session via repository (after booking so Supabase FK resolves)

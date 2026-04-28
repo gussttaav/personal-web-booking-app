@@ -365,7 +365,8 @@ export class PaymentService {
         startIso,
         endIso,
         sessionType,
-        rescheduleToken: rescheduleToken ?? undefined,
+        rescheduleToken:  rescheduleToken ?? undefined,
+        stripePaymentId:  input.refundTarget.payment_intent,
       });
       await this.paymentRepo.markProcessed(idempotencyKey);
       log("info", "Single session booked", { service: "payment", email, startIso });

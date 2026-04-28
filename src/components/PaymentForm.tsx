@@ -60,11 +60,13 @@ const appearance: StripeElementsOptions["appearance"] = {
 // ── Inner form (must be inside <Elements>) ────────────────────────────────────
 
 interface CheckoutFormProps {
+  studentName:  string;
+  studentEmail: string;
   onSuccess: (paymentIntentId: string) => void;
   onCancel:  () => void;
 }
 
-function CheckoutForm({ onSuccess, onCancel }: CheckoutFormProps) {
+function CheckoutForm({ studentName, studentEmail, onSuccess, onCancel }: CheckoutFormProps) {
   const stripe   = useStripe();
   const elements = useElements();
   const [ready,      setReady]      = useState(false);
@@ -83,6 +85,9 @@ function CheckoutForm({ onSuccess, onCancel }: CheckoutFormProps) {
     const { error: stripeError, paymentIntent } = await stripe.confirmPayment({
       elements,
       redirect: "if_required",
+      confirmParams: {
+        payment_method_data: { billing_details: { name: studentName, email: studentEmail, phone: "" } },
+      },
     });
 
     if (stripeError) {
@@ -146,17 +151,19 @@ function CheckoutForm({ onSuccess, onCancel }: CheckoutFormProps) {
 
 interface PaymentFormProps {
   /** clientSecret from POST /api/stripe/checkout, fetched by the caller */
-  clientSecret: string;
+  clientSecret:  string;
+  studentName:   string;
+  studentEmail:  string;
   onSuccess: (paymentIntentId: string) => void;
   onCancel:  () => void;
 }
 
-export default function PaymentForm({ clientSecret, onSuccess, onCancel }: PaymentFormProps) {
+export default function PaymentForm({ clientSecret, studentName, studentEmail, onSuccess, onCancel }: PaymentFormProps) {
   const options: StripeElementsOptions = { clientSecret, appearance };
 
   return (
     <Elements stripe={getStripePromise()} options={options}>
-      <CheckoutForm onSuccess={onSuccess} onCancel={onCancel} />
+      <CheckoutForm studentName={studentName} studentEmail={studentEmail} onSuccess={onSuccess} onCancel={onCancel} />
     </Elements>
   );
 }
