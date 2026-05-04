@@ -180,12 +180,17 @@ export class BookingService {
       throw err;
     }
 
-    // 6. Schedule Zoom cleanup via QStash
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "";
+    // 6. Schedule Zoom cleanup via QStash — fire after the session ends (start + duration + grace),
+    //    not relative to "now". Otherwise sessions booked in advance get terminated before they start.
+    const baseUrl       = process.env.NEXT_PUBLIC_BASE_URL ?? "";
+    const startMs       = new Date(input.startIso).getTime();
+    const totalMinutes  = this.zoom.getDurationWithGrace(input.sessionType);
+    const fireAtMs      = startMs + totalMinutes * 60_000;
+    const delaySeconds  = Math.max(60, Math.ceil((fireAtMs - Date.now()) / 1000));
     await this.scheduler.scheduleAt({
       url:          `${baseUrl}/api/internal/zoom-terminate`,
       body:         { eventId },
-      delaySeconds: this.zoom.getDurationWithGrace(input.sessionType) * 60,
+      delaySeconds,
     });
 
     // 7. Booking record
