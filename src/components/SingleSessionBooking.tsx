@@ -164,38 +164,36 @@ export default function SingleSessionBooking({
     return (
       <BookingLayout>
         <WizardProgress currentStep={3} showPaymentStep={needsPaymentStep} />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 24px" }}>
-          <div style={{ textAlign: "center", maxWidth: 380, width: "100%" }}>
-            <div style={{ width: 64, height: 64, borderRadius: "50%", margin: "0 auto 20px", background: "rgba(78,222,163,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, color: "#4edea3" }}>✓</div>
-            <h2 style={{ fontSize: 22, fontWeight: 500, color: "#e5e1e4", marginBottom: 6, fontFamily: "var(--font-headline, Manrope), sans-serif" }}>¡Encuentro reservado!</h2>
-            <p style={{ fontSize: 14, color: "#bbcabf", marginBottom: 16 }}>{selected?.dateLabel} · {selected?.label}</p>
+        <div className="flex items-center justify-center p-6">
+          <div className="rounded-2xl shadow-2xl p-8 sm:p-10 max-w-md w-full space-y-6" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto text-2xl" style={{ background: COLORS.brandMuted, color: COLORS.brand }} aria-hidden="true">✓</div>
+            <div className="text-center">
+              <h2 className="text-2xl font-bold" style={{ color: COLORS.textPrimary }}>¡Encuentro reservado!</h2>
+              <p className="mt-2 text-sm" style={{ color: COLORS.textSecondary }}>{selected?.dateLabel} · {selected?.label}</p>
+            </div>
 
             {emailFailed ? (
-              <div style={{ background: "rgba(78,222,163,0.08)", border: "1px solid rgba(78,222,163,0.25)", borderRadius: 12, padding: "16px 20px", marginBottom: 20, textAlign: "left" }}>
-                <p style={{ fontSize: 13, fontWeight: 500, color: "#4edea3", marginBottom: 8 }}>⚠️ No pudimos enviarte el email de confirmación</p>
-                <p style={{ fontSize: 12, color: "#bbcabf", marginBottom: 12 }}>Tu encuentro está reservado. Accede a tu sesión aquí:</p>
-                <a href={sessionUrl} style={{ display: "block", fontSize: 13, color: "#4edea3", textDecoration: "underline", marginBottom: 8 }}>Unirse a la sesión →</a>
+              <div className="rounded-xl p-4 text-sm space-y-3" style={{ background: COLORS.background, border: `1px solid ${COLORS.errorBorder}` }}>
+                <p className="font-medium" style={{ color: COLORS.error }}>⚠️ No pudimos enviarte el email de confirmación</p>
+                <p style={{ color: COLORS.textSecondary }}>Tu encuentro está reservado. Accede a tu sesión aquí:</p>
+                <a href={sessionUrl} style={{ display: "block", color: COLORS.brand, textDecoration: "underline" }}>Unirse al aula virtual →</a>
                 {cancelUrl && (
-                  <a href={cancelUrl} style={{ display: "block", fontSize: 12, color: "#bbcabf", marginTop: 4 }}>Cancelar esta reserva</a>
+                  <a href={cancelUrl} style={{ display: "block", color: COLORS.textSecondary, textDecoration: "underline" }}>Cancelar esta reserva</a>
                 )}
-                <p style={{ fontSize: 11, color: "#86948a", margin: "8px 0 0" }}>
-                  Si necesitas ayuda escribe a contacto@gustavoai.dev
-                </p>
+                <p style={{ color: COLORS.textMuted, fontSize: 11 }}>Si necesitas ayuda escribe a contacto@gustavoai.dev</p>
               </div>
             ) : (
-              <>
-                <p style={{ fontSize: 13, color: "#bbcabf", marginBottom: 8 }}>Recibirás el enlace de la sesión y la confirmación por email.</p>
-                {cancelUrl && (
-                  <p style={{ fontSize: 12, color: "#86948a", marginBottom: 20 }}>
-                    También puedes{" "}
-                    <a href={cancelUrl} style={{ color: "#bbcabf", textDecoration: "underline" }}>cancelar esta reserva</a>
-                    {" "}directamente.
-                  </p>
-                )}
-              </>
+              <div className="rounded-xl p-4 text-sm space-y-2" style={{ background: COLORS.background, border: `1px solid ${COLORS.border}` }}>
+                <p style={{ color: COLORS.textSecondary }}>📧 Revisa tu email — incluye el enlace para unirte al aula virtual y los enlaces para cancelar o reprogramar</p>
+                <p style={{ color: COLORS.textSecondary }}>📅 El email incluye un enlace para añadir el evento a tu calendario</p>
+                <p style={{ color: COLORS.textSecondary }}>👤 También puedes unirte, reprogramar o cancelar desde tu área personal en la plataforma</p>
+                <p style={{ color: COLORS.textSecondary }}>↩️ Puedes reprogramar o cancelar sin coste hasta 2 horas antes de la clase</p>
+              </div>
             )}
 
-            <button onClick={onBack} style={secondaryBtnStyle}>Volver al inicio</button>
+            <button onClick={onBack} className="w-full py-2.5 rounded-xl text-sm font-medium" style={{ background: COLORS.brand, color: "#0d0f10", border: "none", cursor: "pointer" }}>
+              Volver al inicio
+            </button>
           </div>
         </div>
       </BookingLayout>

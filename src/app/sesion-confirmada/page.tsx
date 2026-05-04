@@ -46,9 +46,11 @@ function SesionConfirmadaContent() {
         </p>
       </div>
       <div className="rounded-xl p-4 text-sm space-y-2" style={{ background: COLORS.background, border: `1px solid ${COLORS.border}` }}>
-        <p style={{ color: COLORS.textSecondary }}>📧 Revisa tu email — incluye el enlace de Meet y opciones para cancelar o reprogramar</p>
+        <p style={{ color: COLORS.textSecondary }}>📧 Revisa tu email — incluye el enlace para unirte al aula virtual y los enlaces para cancelar o reprogramar</p>
         <p style={{ color: COLORS.textSecondary }}>📅 El email incluye un enlace para añadir el evento a tu calendario</p>
-        <p style={{ color: COLORS.textSecondary }}>↩️ Puedes cancelar hasta 2 horas antes sin ningún coste</p>
+        <p style={{ color: COLORS.textSecondary }}>👤 También puedes unirte, reprogramar o cancelar desde tu área personal en la plataforma</p>
+        <p style={{ color: COLORS.textSecondary }}>↩️ Puedes reprogramar sin coste hasta 2 horas antes de la clase</p>
+        <p style={{ color: COLORS.textSecondary }}>❌ Las cancelaciones con más de 2 horas de antelación están sujetas a la comisión de devolución de Stripe (0,25 € + aprox. 1,5–1,9 % del importe); con menos de 2 horas no se realiza reembolso</p>
       </div>
       <button onClick={() => router.push("/")} className="w-full py-2.5 rounded-xl text-sm font-medium" style={{ background: COLORS.brand, color: "#0d0f10", border: "none", cursor: "pointer" }}>
         Volver al inicio
