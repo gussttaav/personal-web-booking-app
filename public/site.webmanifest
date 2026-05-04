@@ -1,23 +1,23 @@
 {
-  "name": "Gustavo Torres — Profesor & Consultor",
-  "short_name": "Prof. Gustavo",
-  "description": "Clases de programación, matemáticas e IA con Gustavo Torres",
+  "name": "Gustavo Prof.",
+  "short_name": "Gustavo Prof.",
+  "description": "Tutorías de programación, matemáticas e IA con Gustavo Torres",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     },
     {
       "src": "/web-app-manifest-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     }
   ],
-  "theme_color": "#0d0f10",
-  "background_color": "#0d0f10",
+  "theme_color": "#24c58c",
+  "background_color": "#080707",
   "display": "standalone",
   "scope": "/",
   "start_url": "/",

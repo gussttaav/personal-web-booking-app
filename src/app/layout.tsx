@@ -33,9 +33,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Gustavo Torres — Profesor & Consultor",
+  title: "Gustavo Prof. - Tutorías de programación, matemáticas e IA",
   description:
-    "Clases de programación, matemáticas e IA. Reserva una sesión o adquiere un pack de horas con descuento.",
+    "Clases de programación, matemáticas e IA con Gustavo Torres.",
   robots: { index: true, follow: true },
   icons: {
     icon: [
