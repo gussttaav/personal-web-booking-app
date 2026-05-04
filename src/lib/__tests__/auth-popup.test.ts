@@ -5,7 +5,7 @@ function makeFakePopup(initialClosed = false) {
   return { closed: initialClosed, close: jest.fn() };
 }
 
-const ORIGIN = "https://gustavoai.dev";
+const ORIGIN = "https://www.gustavoai.dev";
 
 describe("signInWithPopup", () => {
   let messageListeners: ((e: MessageEvent) => void)[];

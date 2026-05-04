@@ -42,7 +42,8 @@ const nextConfig = {
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "font-src 'self' https://fonts.gstatic.com",
           // Zoom Video SDK loads its WASM engine inside a Web Worker from CloudFront/source.zoom.us
-          `worker-src blob: ${zoomOrigins}`,
+          `worker-src 'self' blob: ${zoomOrigins}`,
+          `child-src 'self' blob: ${zoomOrigins}`,
           "media-src 'self' blob: mediastream:",
           `frame-src ${stripeFrames}`,
           "object-src 'none'",
@@ -53,13 +54,15 @@ const nextConfig = {
           // Removing it breaks the app. A nonce-based alternative would
           // require a custom server — not viable on Vercel's edge runtime.
           "default-src 'self'",
-          `script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com ${zoomOrigins} ${stripeOrigins} blob:`,
+          // 'wasm-unsafe-eval' is required by Zoom Video SDK to instantiate its WebAssembly engine.
+          `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://va.vercel-scripts.com ${zoomOrigins} ${stripeOrigins} blob:`,
           "img-src 'self' https://lh3.googleusercontent.com data: blob:",
           `connect-src 'self' https://www.googleapis.com https://generativelanguage.googleapis.com https://*.upstash.io https://*.zmtg.com ${zoomOrigins} ${stripeOrigins}`,
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "font-src 'self' https://fonts.gstatic.com",
           // Zoom Video SDK loads its WASM engine inside a Web Worker from CloudFront/source.zoom.us
-          `worker-src blob: ${zoomOrigins}`,
+          `worker-src 'self' blob: ${zoomOrigins}`,
+          `child-src 'self' blob: ${zoomOrigins}`,
           "media-src 'self' blob: mediastream:",
           `frame-src ${stripeFrames}`,
           "object-src 'none'",

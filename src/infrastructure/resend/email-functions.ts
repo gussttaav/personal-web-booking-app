@@ -10,7 +10,7 @@
 
 const RESEND_API_URL = "https://api.resend.com/emails";
 const FROM     = process.env.RESEND_FROM ?? "Gustavo Torres <onboarding@resend.dev>";
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "https://gustavoai.dev";
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "https://www.gustavoai.dev";
 
 // ─── Security: HTML escaping ──────────────────────────────────────────────────
 

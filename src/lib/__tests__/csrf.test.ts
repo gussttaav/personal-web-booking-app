@@ -6,11 +6,11 @@ function mockReq(origin: string | null): any {
 
 describe("isValidOrigin", () => {
   beforeEach(() => {
-    process.env.NEXT_PUBLIC_BASE_URL = "https://gustavoai.dev";
+    process.env.NEXT_PUBLIC_BASE_URL = "https://www.gustavoai.dev";
   });
 
   it("accepts the configured origin", () => {
-    expect(isValidOrigin(mockReq("https://gustavoai.dev"))).toBe(true);
+    expect(isValidOrigin(mockReq("https://www.gustavoai.dev"))).toBe(true);
   });
 
   it("rejects a different origin", () => {
@@ -27,6 +27,6 @@ describe("isValidOrigin", () => {
 
   it("rejects when NEXT_PUBLIC_BASE_URL is not set", () => {
     delete process.env.NEXT_PUBLIC_BASE_URL;
-    expect(isValidOrigin(mockReq("https://gustavoai.dev"))).toBe(false);
+    expect(isValidOrigin(mockReq("https://www.gustavoai.dev"))).toBe(false);
   });
 });
