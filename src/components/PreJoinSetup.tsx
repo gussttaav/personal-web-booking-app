@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import ZoomRoom from "./ZoomRoom";
 import PackBookingOverlay from "./PackBookingOverlay";
+import WaitingRoom from "./WaitingRoom";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -87,6 +88,12 @@ export default function PreJoinSetup({
   // ── Phase ──────────────────────────────────────────────────────────────────
   const [phase, setPhase] = useState<"preview" | "session">("preview");
 
+  // ── Zoom session readiness (waiting overlay) ───────────────────────────────
+  const [zoomReady, setZoomReady]   = useState(false);
+  const [zoomError, setZoomError]   = useState<string | null>(null);
+  const [retryKey,  setRetryKey]    = useState(0);
+  const zoomLeaveRef = useRef<(() => Promise<void>) | null>(null);
+
   // ── Device lists & selection ───────────────────────────────────────────────
   const [devices, setDevices] = useState<DeviceLists>({
     audioInputs: [],
@@ -108,7 +115,6 @@ export default function PreJoinSetup({
   const previewStreamRef = useRef<MediaStream | null>(null);
   const micStreamRef     = useRef<MediaStream | null>(null);
   const audioCtxRef      = useRef<AudioContext | null>(null);
-  const analyserRef      = useRef<AnalyserNode | null>(null);
   const animFrameRef     = useRef<number | null>(null);
 
   // ── Start camera preview ───────────────────────────────────────────────────
@@ -170,7 +176,6 @@ export default function PreJoinSetup({
       audioCtxRef.current = ctx;
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
-      analyserRef.current = analyser;
       const src = ctx.createMediaStreamSource(stream);
       src.connect(analyser);
 
@@ -272,6 +277,45 @@ export default function PreJoinSetup({
     }
   }, [selectedSpeakerId]);
 
+  // ── 60 s timeout: show error if Zoom never connects ───────────────────────
+  // zoomReady is in deps so the timeout is cancelled as soon as Zoom connects.
+  useEffect(() => {
+    if (phase !== "session" || zoomReady) return;
+    const t = setTimeout(() => {
+      setZoomError((prev) =>
+        prev ?? "La sesión tardó demasiado en conectar. Por favor, inténtalo de nuevo."
+      );
+    }, 60_000);
+    return () => clearTimeout(t);
+  }, [phase, retryKey, zoomReady]);
+
+  // ── Stable callbacks passed to ZoomRoom ───────────────────────────────────
+  // These MUST be stable (useCallback with empty deps) so that ZoomRoomSession's
+  // effects — which list them as dependencies — don't reset their timers on every
+  // PreJoinSetup re-render. Unstable inline functions caused the onReady 500ms
+  // timer to be cancelled before it could fire, preventing zoomReady from ever
+  // becoming true and letting the 60s timeout win every time.
+  const handleZoomReady = useCallback(() => setZoomReady(true), []);
+  const handleZoomError = useCallback((msg: string) => setZoomError(msg), []);
+  const handleZoomLeaveRef = useCallback(
+    (fn: (() => Promise<void>) | null) => { zoomLeaveRef.current = fn; },
+    []
+  );
+
+  // ── Retry after error ──────────────────────────────────────────────────────
+  // Must call client.leave() on the old SDK instance before remounting so the
+  // Zoom server closes the previous connection — otherwise the new join gets
+  // rejected as a "duplicated operation".
+  const handleZoomRetry = useCallback(() => {
+    setZoomError(null);
+    setZoomReady(false);
+    const leave = zoomLeaveRef.current;
+    zoomLeaveRef.current = null;
+    (leave?.() ?? Promise.resolve()).finally(() => {
+      setRetryKey((k) => k + 1);
+    });
+  }, []);
+
   // ── Enter session ──────────────────────────────────────────────────────────
   const enterSession = useCallback(() => {
     // Stop preview and mic streams before Zoom takes over devices
@@ -295,36 +339,31 @@ export default function PreJoinSetup({
   // ─── Render: session overlay ───────────────────────────────────────────────
   if (phase === "session") {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "#0d0f10" }}>
-        <header
-          className="shrink-0 flex items-center justify-between px-5 py-3"
-          style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}
-        >
-          <div>
-            <p className="text-sm font-medium" style={{ color: "#e5e1e4" }}>
-              {sessionLabel}
-            </p>
-            <p className="text-xs" style={{ color: "#86948a" }}>
-              {timeLabel} (hora de Madrid)
-            </p>
-          </div>
-          <a
-            href="/"
-            className="text-xs"
-            style={{ color: "#4edea3", textDecoration: "none" }}
-          >
-            gustavoai.dev
-          </a>
-        </header>
-        <div className="flex-1 min-h-0">
-          <ZoomRoom
-            eventId={eventId}
-            userName={userName}
-            selectedMicId={selectedMicId || undefined}
-            selectedCameraId={selectedCameraId || undefined}
+      <>
+        {/* Waiting overlay — covers everything until Zoom is fully connected */}
+        {!zoomReady && (
+          <WaitingRoom
+            isCamOff={isCamOff}
+            isMicOff={isMicOff}
+            error={zoomError}
+            onRetry={handleZoomRetry}
+            sessionLabel={sessionLabel}
+            timeLabel={timeLabel}
           />
-        </div>
-      </div>
+        )}
+
+        {/* ZoomRoomSession renders as fixed inset-0 z-[60] and owns the viewport */}
+        <ZoomRoom
+          key={retryKey}
+          eventId={eventId}
+          userName={userName}
+          selectedMicId={selectedMicId || undefined}
+          selectedCameraId={selectedCameraId || undefined}
+          onReady={handleZoomReady}
+          onError={handleZoomError}
+          onLeaveRef={handleZoomLeaveRef}
+        />
+      </>
     );
   }
 

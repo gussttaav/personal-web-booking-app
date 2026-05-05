@@ -45,6 +45,11 @@ export interface ZoomRoomInnerProps {
   userName:          string;
   selectedMicId?:    string;
   selectedCameraId?: string;
+  onReady?:          () => void;
+  onError?:          (msg: string) => void;
+  // Called with a leave fn once the SDK client is created, and null on unmount.
+  // Lets the parent drain the server-side session before remounting on retry.
+  onLeaveRef?:       (fn: (() => Promise<void>) | null) => void;
 }
 
 type RoomState = "loading" | "ready" | "joining" | "connected" | "ended" | "error";
@@ -170,6 +175,9 @@ export default function ZoomRoomInner({
   userName,
   selectedMicId,
   selectedCameraId,
+  onReady,
+  onError,
+  onLeaveRef,
 }: ZoomRoomInnerProps) {
   const [state, setState]             = useState<RoomState>("loading");
   const [errorMsg, setErrorMsg]       = useState("");
@@ -253,6 +261,8 @@ export default function ZoomRoomInner({
 
       const client      = ZoomVideo.createClient();
       clientRef.current = client;
+      // Give parent a handle to drain the server-side session before any retry.
+      onLeaveRef?.(() => clientRef.current?.leave() ?? Promise.resolve());
 
       const initResult = await client.init("en-US", "CDN");
       if (initResult instanceof Error) throw initResult;
@@ -459,6 +469,10 @@ export default function ZoomRoomInner({
       setErrorMsg(msg || "Error al unirse a la sesión");
       setState("error");
     }
+    // onLeaveRef is intentionally omitted: it's a ref-backed inline function whose
+    // identity changes every render. Including it would recreate handleJoin constantly
+    // and break the joinedRef guard that prevents double-joins.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userName, eventId, selectedMicId, selectedCameraId]);
 
   // ── Auto-join once the token is ready ─────────────────────────────────────
@@ -521,16 +535,20 @@ export default function ZoomRoomInner({
   }, [isCamOff]);
 
   // ── Cleanup on unmount ─────────────────────────────────────────────────────
-  // IMPORTANT: Do NOT call client.leave() here!
+  // IMPORTANT: Do NOT call client.leave() here — React Strict Mode triggers this
+  // cleanup immediately, corrupting the SDK's WASM workers. Callers that need to
+  // leave before remounting (retry) must use the onLeaveRef callback instead.
   useEffect(() => {
     return () => {
       destroyedRef.current = true;
+      onLeaveRef?.(null); // invalidate parent's leave handle
       if (timerRef.current) clearInterval(timerRef.current);
       if (audioRafRef.current !== null) cancelAnimationFrame(audioRafRef.current);
       audioStreamRef.current?.getTracks().forEach((t) => t.stop());
       audioCtxRef.current?.close().catch(() => {});
       streamRef.current?.stopShareScreen().catch(() => {});
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Video cover-fill ──────────────────────────────────────────────────────
@@ -599,6 +617,19 @@ export default function ZoomRoomInner({
       window.removeEventListener("resize", onResize);
     };
   }, []);
+
+  // ── Notify parent when session is fully connected ─────────────────────────
+  // 500ms delay ensures the video element has had time to start rendering.
+  useEffect(() => {
+    if (state !== "connected" || !onReady) return;
+    const t = setTimeout(onReady, 500);
+    return () => clearTimeout(t);
+  }, [state, onReady]);
+
+  // ── Notify parent on error ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (state === "error" && onError) onError(errorMsg || "Error al conectar con la sesión");
+  }, [state, errorMsg, onError]);
 
   // ── Elapsed timer: HH:MM ──────────────────────────────────────────────────
   const hh           = String(Math.floor(elapsedSec / 3600)).padStart(2, "0");
