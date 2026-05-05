@@ -189,7 +189,8 @@ export default function ZoomRoomInner({
   const [remoteUsers, setRemoteUsers] = useState<
     Array<{ userId: number; displayName: string }>
   >([]);
-  const [isSharingScreen, setIsSharingScreen] = useState(false);
+  const [isSharingScreen, setIsSharingScreen]   = useState(false);
+  const [isReceivingShare, setIsReceivingShare] = useState(false);
 
   const tokenRef       = useRef<TokenResponse | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -213,9 +214,12 @@ export default function ZoomRoomInner({
   const localMountRef  = useRef<HTMLDivElement>(null);
   const remoteMountRef = useRef<HTMLDivElement>(null);
 
-  // ── Screen share canvas — always in DOM so ref is valid before startShareScreen() ─
-  // Must be HTMLCanvasElement: startShareView() requires canvas (startShareScreen accepts both).
-  const shareVideoRef = useRef<HTMLCanvasElement>(null);
+  // ── Screen share elements — always in DOM so refs are valid before share operations ─
+  // shareVideoRef  (HTMLVideoElement) → startShareScreen; video tolerates display:none/zero layout size.
+  // shareCanvasRef (HTMLCanvasElement) → startShareView;  canvas needs intrinsic width/height attrs
+  //   because the SDK reads canvas.width/height for codec setup — CSS layout size is irrelevant.
+  const shareVideoRef  = useRef<HTMLVideoElement>(null);
+  const shareCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // ── Section refs and video aspect ratio for cover-fill ─
   const localSectionRef  = useRef<HTMLElement>(null);
@@ -415,21 +419,23 @@ export default function ZoomRoomInner({
       // active-share-change fires on ALL clients when someone starts/stops sharing.
       // Without this, remote participants never see the shared screen because
       // startShareView() is never called to bind the incoming stream to the canvas.
-      const shareEl = shareVideoRef.current;
+      // shareCanvasRef has explicit width/height attrs so the SDK's codec setup
+      // reads non-zero intrinsic dimensions even when the element is display:none.
+      const shareCanvas = shareCanvasRef.current;
       client.on(
         "active-share-change",
         async ({ state: shareState, userId: sharingUserId }: { state: "Active" | "Inactive"; userId: number }) => {
-          if (destroyedRef.current || !shareEl) return;
+          if (destroyedRef.current || !shareCanvas) return;
           if (shareState === "Active" && sharingUserId !== selfUserId) {
             try {
-              await stream.startShareView(shareEl, sharingUserId);
-              setIsSharingScreen(true);
+              await stream.startShareView(shareCanvas, sharingUserId);
+              setIsReceivingShare(true);
             } catch (e) {
               console.warn("[ZoomRoom] startShareView failed:", e);
             }
           } else if (shareState === "Inactive" && sharingUserId !== selfUserId) {
             try { await stream.stopShareView(); } catch { /* ignore */ }
-            setIsSharingScreen(false);
+            setIsReceivingShare(false);
           }
         }
       );
@@ -737,19 +743,31 @@ export default function ZoomRoomInner({
 
           {/* Content area — switches between 2-col grid (normal) and 75/25 flex row (sharing) */}
           <div className={`flex-1 min-h-0 py-4 px-4 md:px-0 overflow-hidden ${
-            isSharingScreen
+            isSharingScreen || isReceivingShare
               ? "flex flex-row gap-4"
               : "grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto md:overflow-hidden"
           }`}>
 
-            {/* ── Screen share panel — always in DOM so shareVideoRef is valid before startShareScreen() ── */}
-            <div className={isSharingScreen
+            {/* ── Screen share panel — both elements always in DOM so refs are valid ── */}
+            <div className={(isSharingScreen || isReceivingShare)
               ? "flex-[3] relative rounded-2xl overflow-hidden bg-black border border-white/5"
               : "hidden"
             }>
-              <canvas
+              {/* Local preview — used by startShareScreen; hidden when viewing remote share */}
+              <video
                 ref={shareVideoRef}
-                className="absolute inset-0 w-full h-full object-contain"
+                className={`absolute inset-0 w-full h-full object-contain${isReceivingShare ? " hidden" : ""}`}
+                autoPlay
+                muted
+                playsInline
+              />
+              {/* Remote view canvas — used by startShareView; explicit intrinsic dimensions
+                  so the SDK's codec setup reads non-zero canvas.width/height even when hidden */}
+              <canvas
+                ref={shareCanvasRef}
+                width={1280}
+                height={720}
+                className={`absolute inset-0 w-full h-full object-contain${isReceivingShare ? "" : " hidden"}`}
               />
               <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-sm text-[#4edea3] text-[9px] px-2 py-1 rounded-lg font-headline uppercase tracking-widest">
                 Pantalla compartida
@@ -760,13 +778,13 @@ export default function ZoomRoomInner({
               Videos wrapper — display:contents in grid mode (children become direct grid items),
               flex-col in share mode (25% column with stacked panels).
             */}
-            <div className={isSharingScreen
+            <div className={(isSharingScreen || isReceivingShare)
               ? "flex-[1] flex flex-col gap-3 min-h-0"
               : "contents"
             }>
 
               {/* ── Remote / Tutor panel ── */}
-              <div className={`flex flex-col gap-3 ${isSharingScreen ? "flex-1 min-h-0" : "h-full min-h-[300px]"}`}>
+              <div className={`flex flex-col gap-3 ${isSharingScreen || isReceivingShare ? "flex-1 min-h-0" : "h-full min-h-[300px]"}`}>
                 <section ref={remoteSectionRef} className="flex-1 relative group overflow-hidden rounded-2xl bg-surface-container shadow-2xl border border-white/5">
                   {/*
                     remoteMountRef div is ALWAYS in the DOM so makeVPC() always
@@ -805,7 +823,7 @@ export default function ZoomRoomInner({
               </div>
 
               {/* ── Local / Self panel ── */}
-              <div className={`flex flex-col gap-3 ${isSharingScreen ? "flex-1 min-h-0" : "h-full min-h-[300px]"}`}>
+              <div className={`flex flex-col gap-3 ${isSharingScreen || isReceivingShare ? "flex-1 min-h-0" : "h-full min-h-[300px]"}`}>
                 <section ref={localSectionRef} className="flex-1 relative overflow-hidden rounded-2xl bg-surface-container shadow-2xl border border-white/5">
                   {/* Always-present Zoom mount — video-player-container lives here */}
                   <div ref={localMountRef} className="absolute inset-0" />
