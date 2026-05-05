@@ -213,8 +213,9 @@ export default function ZoomRoomInner({
   const localMountRef  = useRef<HTMLDivElement>(null);
   const remoteMountRef = useRef<HTMLDivElement>(null);
 
-  // ── Screen share video element — always in DOM so ref is valid before startShareScreen() ─
-  const shareVideoRef = useRef<HTMLVideoElement>(null);
+  // ── Screen share canvas — always in DOM so ref is valid before startShareScreen() ─
+  // Must be HTMLCanvasElement: startShareView() requires canvas (startShareScreen accepts both).
+  const shareVideoRef = useRef<HTMLCanvasElement>(null);
 
   // ── Section refs and video aspect ratio for cover-fill ─
   const localSectionRef  = useRef<HTMLElement>(null);
@@ -410,6 +411,29 @@ export default function ZoomRoomInner({
         }
       );
 
+      // ── Receive remote screen share ──
+      // active-share-change fires on ALL clients when someone starts/stops sharing.
+      // Without this, remote participants never see the shared screen because
+      // startShareView() is never called to bind the incoming stream to the canvas.
+      const shareEl = shareVideoRef.current;
+      client.on(
+        "active-share-change",
+        async ({ state: shareState, userId: sharingUserId }: { state: "Active" | "Inactive"; userId: number }) => {
+          if (destroyedRef.current || !shareEl) return;
+          if (shareState === "Active" && sharingUserId !== selfUserId) {
+            try {
+              await stream.startShareView(shareEl, sharingUserId);
+              setIsSharingScreen(true);
+            } catch (e) {
+              console.warn("[ZoomRoom] startShareView failed:", e);
+            }
+          } else if (shareState === "Inactive" && sharingUserId !== selfUserId) {
+            try { await stream.stopShareView(); } catch { /* ignore */ }
+            setIsSharingScreen(false);
+          }
+        }
+      );
+
       // ── Local audio analysis for self speaking indicator ──
       // Opens a monitoring-only MediaStream (never sent anywhere) so the
       // voice-bar animates even in single-participant sessions where
@@ -487,6 +511,7 @@ export default function ZoomRoomInner({
     audioStreamRef.current?.getTracks().forEach((t) => t.stop());
     audioCtxRef.current?.close().catch(() => {});
     try { if (streamRef.current) await streamRef.current.stopShareScreen(); } catch { /* ignore */ }
+    try { if (streamRef.current) await streamRef.current.stopShareView();   } catch { /* ignore */ }
     try { if (streamRef.current) await streamRef.current.stopVideo(); } catch { /* ignore */ }
     try { if (streamRef.current) await streamRef.current.stopAudio(); } catch { /* ignore */ }
     try { if (clientRef.current) await clientRef.current.leave();     } catch { /* ignore */ }
@@ -547,6 +572,7 @@ export default function ZoomRoomInner({
       audioStreamRef.current?.getTracks().forEach((t) => t.stop());
       audioCtxRef.current?.close().catch(() => {});
       streamRef.current?.stopShareScreen().catch(() => {});
+      streamRef.current?.stopShareView().catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -637,6 +663,7 @@ export default function ZoomRoomInner({
   const elapsedLabel = `${hh}:${mm}`;
 
   const isConnected = state === "connected";
+  const canShare    = typeof navigator.mediaDevices?.getDisplayMedia === "function";
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
@@ -720,12 +747,9 @@ export default function ZoomRoomInner({
               ? "flex-[3] relative rounded-2xl overflow-hidden bg-black border border-white/5"
               : "hidden"
             }>
-              <video
+              <canvas
                 ref={shareVideoRef}
                 className="absolute inset-0 w-full h-full object-contain"
-                autoPlay
-                muted
-                playsInline
               />
               <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-sm text-[#4edea3] text-[9px] px-2 py-1 rounded-lg font-headline uppercase tracking-widest">
                 Pantalla compartida
@@ -885,15 +909,22 @@ export default function ZoomRoomInner({
                   if (isSharingScreen) { void stopScreenShare(); }
                   else { void startScreenShare(); }
                 }}
-                disabled={!isConnected}
+                disabled={!isConnected || !canShare}
+                title={!canShare ? "Compartir pantalla no está disponible en dispositivos móviles" : undefined}
                 className={[
                   "flex flex-col items-center justify-center rounded-xl p-2 w-16 h-16 transition-all duration-200 shadow-lg",
                   isSharingScreen
                     ? "bg-[#ffb4ab] text-[#0e0e10] shadow-[#ffb4ab]/20 active:scale-95"
                     : "bg-[#4edea3] text-[#0e0e10] shadow-[#4edea3]/20 active:scale-95",
-                  !isConnected ? "cursor-not-allowed opacity-50" : "cursor-pointer",
+                  !isConnected || !canShare ? "cursor-not-allowed opacity-50" : "cursor-pointer",
                 ].join(" ")}
-                aria-label={isSharingScreen ? "Dejar de compartir pantalla" : "Compartir pantalla"}
+                aria-label={
+                  !canShare
+                    ? "Compartir pantalla no disponible en móvil"
+                    : isSharingScreen
+                      ? "Dejar de compartir pantalla"
+                      : "Compartir pantalla"
+                }
               >
                 <span
                   className="material-symbols-outlined mb-1"
