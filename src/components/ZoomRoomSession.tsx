@@ -386,7 +386,15 @@ export default function ZoomRoomInner({
             setRemoteCamOffIds((prev) => prev.filter((id) => id !== userId));
           } else {
             await detachRemoteVideo(stream, remoteVPC, userId);
-            setRemoteCamOffIds((prev) => prev.includes(userId) ? prev : [...prev, userId]);
+            // Only mark cam-off if the user is still in the session. On disconnect
+            // the SDK fires this event but the participant is already out of
+            // getAllUser, so we should fall back to WaitingOverlay instead.
+            const stillInSession = (client.getAllUser() as Array<{ userId: number }>).some(
+              (u) => u.userId === userId
+            );
+            if (stillInSession) {
+              setRemoteCamOffIds((prev) => prev.includes(userId) ? prev : [...prev, userId]);
+            }
           }
         }
       );
@@ -407,15 +415,17 @@ export default function ZoomRoomInner({
         async (users: Array<{ userId: number }>) => {
           if (destroyedRef.current) return;
           const removedIds = new Set(users.map((u) => u.userId));
-          // Detach video so the frozen frame doesn't show through WaitingOverlay
+          // Update state first so WaitingOverlay renders immediately;
+          // peer-video-state-change "Stop" has typically already detached the video,
+          // so the detach below is a defensive cleanup.
+          setRemoteUsers((prev) => prev.filter((u) => !removedIds.has(u.userId)));
+          setRemoteCamOffIds((prev) => prev.filter((id) => !removedIds.has(id)));
+          setRemoteMutedIds((prev) => prev.filter((id) => !removedIds.has(id)));
           if (remoteVPC) {
             for (const u of users) {
               await detachRemoteVideo(stream, remoteVPC, u.userId);
             }
           }
-          setRemoteUsers((prev) => prev.filter((u) => !removedIds.has(u.userId)));
-          setRemoteCamOffIds((prev) => prev.filter((id) => !removedIds.has(id)));
-          setRemoteMutedIds((prev) => prev.filter((id) => !removedIds.has(id)));
         }
       );
 
