@@ -299,7 +299,7 @@ export default function ZoomRoomInner({
       selfUserIdRef.current = selfUserId;
 
       // Seed remote user list from current participants
-      const allUsers = client.getAllUser() as Array<{ userId: number; displayName?: string; bVideoOn?: boolean; bAudioMuted?: boolean }>;
+      const allUsers = client.getAllUser() as Array<{ userId: number; displayName?: string; bVideoOn?: boolean; muted?: boolean }>;
       const others   = allUsers
         .filter((u) => u.userId !== selfUserId)
         .map((u) => ({ userId: u.userId, displayName: u.displayName ?? "Participante" }));
@@ -307,7 +307,7 @@ export default function ZoomRoomInner({
 
       // Seed per-user video/audio state from current participant list
       const initialCamOff = allUsers.filter((u) => u.userId !== selfUserId && !u.bVideoOn).map((u) => u.userId);
-      const initialMuted  = allUsers.filter((u) => u.userId !== selfUserId &&  u.bAudioMuted).map((u) => u.userId);
+      const initialMuted  = allUsers.filter((u) => u.userId !== selfUserId &&  u.muted).map((u) => u.userId);
       if (initialCamOff.length > 0) setRemoteCamOffIds(initialCamOff);
       if (initialMuted.length  > 0) setRemoteMutedIds(initialMuted);
 
@@ -403,7 +403,7 @@ export default function ZoomRoomInner({
       );
 
       client.on(
-        "user-remove",
+        "user-removed",
         async (users: Array<{ userId: number }>) => {
           if (destroyedRef.current) return;
           const removedIds = new Set(users.map((u) => u.userId));
@@ -420,15 +420,16 @@ export default function ZoomRoomInner({
       );
 
       // Track remote mute state changes. The Zoom SDK fires user-updated with partial
-      // user objects — only changed properties are present, so bAudioMuted may be absent.
+      // payloads — only changed properties are present, so `muted` may be absent.
       client.on(
         "user-updated",
-        (users: Array<{ userId: number; bAudioMuted?: boolean }>) => {
+        (users: Array<{ userId: number; muted?: boolean }>) => {
           if (destroyedRef.current) return;
           users.forEach((u) => {
-            if (u.bAudioMuted === true) {
+            if (u.userId === selfUserIdRef.current) return;
+            if (u.muted === true) {
               setRemoteMutedIds((prev) => prev.includes(u.userId) ? prev : [...prev, u.userId]);
-            } else if (u.bAudioMuted === false) {
+            } else if (u.muted === false) {
               setRemoteMutedIds((prev) => prev.filter((id) => id !== u.userId));
             }
           });
@@ -898,9 +899,13 @@ export default function ZoomRoomInner({
                     </div>
                   )}
 
-                  {/* Voice indicator */}
+                  {/* Voice / mute indicator */}
                   <div className="absolute bottom-4 left-4">
-                    <VoiceBars active={activeSpeakers.includes(selfUserIdRef.current)} />
+                    {isMuted ? (
+                      <MutedMicIndicator />
+                    ) : (
+                      <VoiceBars active={activeSpeakers.includes(selfUserIdRef.current)} />
+                    )}
                   </div>
                 </section>
 
