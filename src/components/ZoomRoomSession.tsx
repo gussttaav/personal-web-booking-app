@@ -139,6 +139,20 @@ function VoiceBars({ active }: { active: boolean }) {
   );
 }
 
+// Muted mic indicator for remote participant.
+function MutedMicIndicator() {
+  return (
+    <div className="flex items-center h-4 bg-black/40 px-2 py-1 rounded backdrop-blur-sm">
+      <span
+        className="material-symbols-outlined"
+        style={{ fontSize: "14px", color: "#ffb4ab" }}
+      >
+        mic_off
+      </span>
+    </div>
+  );
+}
+
 // ─── Video attachment helpers ──────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -191,6 +205,8 @@ export default function ZoomRoomInner({
   >([]);
   const [isSharingScreen, setIsSharingScreen]   = useState(false);
   const [isReceivingShare, setIsReceivingShare] = useState(false);
+  const [remoteCamOffIds, setRemoteCamOffIds]   = useState<number[]>([]);
+  const [remoteMutedIds,  setRemoteMutedIds]    = useState<number[]>([]);
 
   const tokenRef       = useRef<TokenResponse | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -283,11 +299,17 @@ export default function ZoomRoomInner({
       selfUserIdRef.current = selfUserId;
 
       // Seed remote user list from current participants
-      const allUsers = client.getAllUser() as Array<{ userId: number; displayName?: string }>;
+      const allUsers = client.getAllUser() as Array<{ userId: number; displayName?: string; bVideoOn?: boolean; bAudioMuted?: boolean }>;
       const others   = allUsers
         .filter((u) => u.userId !== selfUserId)
         .map((u) => ({ userId: u.userId, displayName: u.displayName ?? "Participante" }));
       if (others.length > 0) setRemoteUsers(others);
+
+      // Seed per-user video/audio state from current participant list
+      const initialCamOff = allUsers.filter((u) => u.userId !== selfUserId && !u.bVideoOn).map((u) => u.userId);
+      const initialMuted  = allUsers.filter((u) => u.userId !== selfUserId &&  u.bAudioMuted).map((u) => u.userId);
+      if (initialCamOff.length > 0) setRemoteCamOffIds(initialCamOff);
+      if (initialMuted.length  > 0) setRemoteMutedIds(initialMuted);
 
       // ── Prepare video-player-container elements BEFORE starting video ──
       // remoteMountRef is always in the DOM (WaitingOverlay is overlaid, not replacing it)
@@ -359,8 +381,13 @@ export default function ZoomRoomInner({
         "peer-video-state-change",
         async ({ action, userId }: { action: "Start" | "Stop"; userId: number }) => {
           if (!remoteVPC || destroyedRef.current) return;
-          if (action === "Start") await attachRemoteVideo(stream, remoteVPC, userId, VideoQuality);
-          else                    await detachRemoteVideo(stream, remoteVPC, userId);
+          if (action === "Start") {
+            await attachRemoteVideo(stream, remoteVPC, userId, VideoQuality);
+            setRemoteCamOffIds((prev) => prev.filter((id) => id !== userId));
+          } else {
+            await detachRemoteVideo(stream, remoteVPC, userId);
+            setRemoteCamOffIds((prev) => prev.includes(userId) ? prev : [...prev, userId]);
+          }
         }
       );
 
@@ -377,10 +404,34 @@ export default function ZoomRoomInner({
 
       client.on(
         "user-remove",
-        (users: Array<{ userId: number }>) => {
+        async (users: Array<{ userId: number }>) => {
           if (destroyedRef.current) return;
           const removedIds = new Set(users.map((u) => u.userId));
+          // Detach video so the frozen frame doesn't show through WaitingOverlay
+          if (remoteVPC) {
+            for (const u of users) {
+              await detachRemoteVideo(stream, remoteVPC, u.userId);
+            }
+          }
           setRemoteUsers((prev) => prev.filter((u) => !removedIds.has(u.userId)));
+          setRemoteCamOffIds((prev) => prev.filter((id) => !removedIds.has(id)));
+          setRemoteMutedIds((prev) => prev.filter((id) => !removedIds.has(id)));
+        }
+      );
+
+      // Track remote mute state changes. The Zoom SDK fires user-updated with partial
+      // user objects — only changed properties are present, so bAudioMuted may be absent.
+      client.on(
+        "user-updated",
+        (users: Array<{ userId: number; bAudioMuted?: boolean }>) => {
+          if (destroyedRef.current) return;
+          users.forEach((u) => {
+            if (u.bAudioMuted === true) {
+              setRemoteMutedIds((prev) => prev.includes(u.userId) ? prev : [...prev, u.userId]);
+            } else if (u.bAudioMuted === false) {
+              setRemoteMutedIds((prev) => prev.filter((id) => id !== u.userId));
+            }
+          });
         }
       );
 
@@ -795,11 +846,20 @@ export default function ZoomRoomInner({
 
                   {remoteUsers.length === 0 && <WaitingOverlay />}
 
-                  {/* Voice indicator — rendered after WaitingOverlay so it sits on top */}
+                  {/* Camera-off overlay for remote participant */}
+                  {remoteUsers.length > 0 && remoteCamOffIds.includes(remoteUsers[0].userId) && (
+                    <CamOffOverlay />
+                  )}
+
+                  {/* Voice / mute indicator — rendered last so it sits on top */}
                   <div className="absolute bottom-4 left-4">
-                    <VoiceBars
-                      active={remoteUsers.some((u) => activeSpeakers.includes(u.userId))}
-                    />
+                    {remoteUsers.length > 0 && remoteMutedIds.includes(remoteUsers[0].userId) ? (
+                      <MutedMicIndicator />
+                    ) : (
+                      <VoiceBars
+                        active={remoteUsers.some((u) => activeSpeakers.includes(u.userId))}
+                      />
+                    )}
                   </div>
                 </section>
 
