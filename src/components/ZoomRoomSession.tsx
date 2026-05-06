@@ -28,6 +28,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import SessionChat from "./SessionChat";
+import { useZoomConnectionQuality } from "@/hooks/useZoomConnectionQuality";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -153,6 +154,66 @@ function MutedMicIndicator() {
   );
 }
 
+// Connection-lost overlay — shown on a remote panel when stats indicate the
+// peer's stream has stalled (faster than the SDK's ~60 s heartbeat).
+function ConnectionLostOverlay() {
+  return (
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center gap-3"
+      style={{ background: "#0e0e10" }}
+    >
+      <span
+        className="material-symbols-outlined text-5xl"
+        style={{ color: "#ffb4ab" }}
+      >
+        wifi_off
+      </span>
+      <p className="text-xs font-medium" style={{ color: "#ffb4ab" }}>
+        Conexión perdida
+      </p>
+    </div>
+  );
+}
+
+// Reconnecting overlay — shown on the local self-panel while the SDK reports
+// state="Reconnecting".
+function ReconnectingOverlay() {
+  return (
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center gap-3"
+      style={{ background: "#0e0e10" }}
+    >
+      <span
+        className="material-symbols-outlined text-5xl animate-spin"
+        style={{ color: "#f5c451" }}
+      >
+        sync_problem
+      </span>
+      <p className="text-xs font-medium" style={{ color: "#f5c451" }}>
+        Reconectando...
+      </p>
+    </div>
+  );
+}
+
+// Poor-connection badge — small corner indicator visible to BOTH sides on the
+// affected user's panel (each side derives it independently from the SDK's
+// network-quality-change event, which is broadcast to every client).
+function PoorConnectionBadge() {
+  return (
+    <div className="flex items-center h-4 bg-black/40 px-2 py-1 rounded backdrop-blur-sm">
+      <span
+        className="material-symbols-outlined"
+        style={{ fontSize: "14px", color: "#f5c451" }}
+        aria-label="Conexión inestable"
+        title="Conexión inestable"
+      >
+        signal_cellular_alt_2_bar
+      </span>
+    </div>
+  );
+}
+
 // ─── Video attachment helpers ──────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -207,6 +268,20 @@ export default function ZoomRoomInner({
   const [isReceivingShare, setIsReceivingShare] = useState(false);
   const [remoteCamOffIds, setRemoteCamOffIds]   = useState<number[]>([]);
   const [remoteMutedIds,  setRemoteMutedIds]    = useState<number[]>([]);
+  // Reactive copies of clientRef and selfUserIdRef so useZoomConnectionQuality
+  // can re-attach SDK listeners when they change.
+  const [client,     setClient]     = useState<unknown | null>(null);
+  const [selfUserId, setSelfUserId] = useState<number>(0);
+
+  // Network quality + lost-connection detection. The returned `qos` object also
+  // exposes raw QoS snapshots (rtt/jitter/loss/fps/bitrate/...) for a future
+  // Settings panel — pass `qos` as a prop when that panel is built.
+  const remoteUserIdForQos = remoteUsers.length > 0 ? remoteUsers[0].userId : null;
+  const qos = useZoomConnectionQuality({
+    client,
+    selfUserId,
+    remoteUserId: remoteUserIdForQos,
+  });
 
   const tokenRef       = useRef<TokenResponse | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -225,10 +300,6 @@ export default function ZoomRoomInner({
   // ── Critical guards ────────────────────────────────────────────────────────
   const joinedRef    = useRef(false);
   const destroyedRef = useRef(false);
-
-  // Per-user timer that fires if peer-video-state-change "Stop" arrives without a
-  // matching user-updated bVideoOn:false signal — i.e. an unannounced disconnect.
-  const disconnectTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   // ── Mount divs — ALWAYS in the DOM so refs are never null when makeVPC runs ─
   const localMountRef  = useRef<HTMLDivElement>(null);
@@ -286,6 +357,7 @@ export default function ZoomRoomInner({
 
       const client      = ZoomVideo.createClient();
       clientRef.current = client;
+      setClient(client);
       // Give parent a handle to drain the server-side session before any retry.
       onLeaveRef?.(() => clientRef.current?.leave() ?? Promise.resolve());
 
@@ -299,19 +371,20 @@ export default function ZoomRoomInner({
 
       const stream      = client.getMediaStream();
       streamRef.current = stream;
-      const selfUserId  = client.getCurrentUserInfo().userId;
-      selfUserIdRef.current = selfUserId;
+      const selfId      = client.getCurrentUserInfo().userId;
+      selfUserIdRef.current = selfId;
+      setSelfUserId(selfId);
 
       // Seed remote user list from current participants
       const allUsers = client.getAllUser() as Array<{ userId: number; displayName?: string; bVideoOn?: boolean; muted?: boolean }>;
       const others   = allUsers
-        .filter((u) => u.userId !== selfUserId)
+        .filter((u) => u.userId !== selfId)
         .map((u) => ({ userId: u.userId, displayName: u.displayName ?? "Participante" }));
       if (others.length > 0) setRemoteUsers(others);
 
       // Seed per-user video/audio state from current participant list
-      const initialCamOff = allUsers.filter((u) => u.userId !== selfUserId && !u.bVideoOn).map((u) => u.userId);
-      const initialMuted  = allUsers.filter((u) => u.userId !== selfUserId &&  u.muted).map((u) => u.userId);
+      const initialCamOff = allUsers.filter((u) => u.userId !== selfId && !u.bVideoOn).map((u) => u.userId);
+      const initialMuted  = allUsers.filter((u) => u.userId !== selfId &&  u.muted).map((u) => u.userId);
       if (initialCamOff.length > 0) setRemoteCamOffIds(initialCamOff);
       if (initialMuted.length  > 0) setRemoteMutedIds(initialMuted);
 
@@ -360,7 +433,7 @@ export default function ZoomRoomInner({
       // ── Attach self video ──
       if (localVPC && stream.isCapturingVideo()) {
         try {
-          const el = await stream.attachVideo(selfUserId, VideoQuality.Video_360P);
+          const el = await stream.attachVideo(selfId, VideoQuality.Video_360P);
           if (el && !(el instanceof Error)) {
             const node = el as unknown as HTMLElement;
             node.style.cssText = "position:absolute;inset:0;";
@@ -374,7 +447,7 @@ export default function ZoomRoomInner({
       // ── Attach existing remote participants ──
       if (remoteVPC) {
         for (const p of client.getAllUser()) {
-          if (p.userId !== selfUserId && p.bVideoOn) {
+          if (p.userId !== selfId && p.bVideoOn) {
             await attachRemoteVideo(stream, remoteVPC, p.userId, VideoQuality);
           }
         }
@@ -385,40 +458,12 @@ export default function ZoomRoomInner({
         "peer-video-state-change",
         async ({ action, userId }: { action: "Start" | "Stop"; userId: number }) => {
           if (!remoteVPC || destroyedRef.current) return;
-
-          // Any incoming video event invalidates a pending disconnect timer.
-          const existing = disconnectTimersRef.current.get(userId);
-          if (existing) {
-            clearTimeout(existing);
-            disconnectTimersRef.current.delete(userId);
-          }
-
           if (action === "Start") {
             await attachRemoteVideo(stream, remoteVPC, userId, VideoQuality);
             setRemoteCamOffIds((prev) => prev.filter((id) => id !== userId));
-            // Self-heal: if the disconnect timer already fired and removed the
-            // user, put them back from the SDK's participant list.
-            setRemoteUsers((prev) => {
-              if (prev.some((u) => u.userId === userId)) return prev;
-              const u = (client.getAllUser() as Array<{ userId: number; displayName?: string }>).find(
-                (x) => x.userId === userId
-              );
-              return u ? [...prev, { userId, displayName: u.displayName ?? "Participante" }] : prev;
-            });
           } else {
             await detachRemoteVideo(stream, remoteVPC, userId);
-            // Defer the cam-off decision: an intentional cam-off is followed by
-            // user-updated bVideoOn:false within the grace window (which sets
-            // remoteCamOffIds and cancels this timer). On disconnect that signal
-            // never arrives, so we proactively drop the user → WaitingOverlay.
-            const t = setTimeout(() => {
-              if (destroyedRef.current) return;
-              disconnectTimersRef.current.delete(userId);
-              setRemoteUsers((prev) => prev.filter((u) => u.userId !== userId));
-              setRemoteCamOffIds((prev) => prev.filter((id) => id !== userId));
-              setRemoteMutedIds((prev) => prev.filter((id) => id !== userId));
-            }, 1500);
-            disconnectTimersRef.current.set(userId, t);
+            setRemoteCamOffIds((prev) => prev.includes(userId) ? prev : [...prev, userId]);
           }
         }
       );
@@ -439,14 +484,6 @@ export default function ZoomRoomInner({
         async (users: Array<{ userId: number }>) => {
           if (destroyedRef.current) return;
           const removedIds = new Set(users.map((u) => u.userId));
-          // Cancel any pending disconnect timers for these users.
-          removedIds.forEach((id) => {
-            const t = disconnectTimersRef.current.get(id);
-            if (t) {
-              clearTimeout(t);
-              disconnectTimersRef.current.delete(id);
-            }
-          });
           // Update state first so WaitingOverlay renders immediately;
           // peer-video-state-change "Stop" has typically already detached the video,
           // so the detach below is a defensive cleanup.
@@ -461,34 +498,19 @@ export default function ZoomRoomInner({
         }
       );
 
-      // Track remote mute / camera state changes. The SDK fires user-updated with
-      // partial payloads — only changed properties are present.
-      // bVideoOn:false here is the explicit "intentional cam-off" signal that
-      // distinguishes a deliberate camera stop from a disconnect.
+      // Track remote mute state. The SDK fires user-updated with partial payloads
+      // — only changed properties are present, so `muted` may be absent.
+      // Camera state is owned by peer-video-state-change.
       client.on(
         "user-updated",
-        (users: Array<{ userId: number; muted?: boolean; bVideoOn?: boolean }>) => {
+        (users: Array<{ userId: number; muted?: boolean }>) => {
           if (destroyedRef.current) return;
           users.forEach((u) => {
             if (u.userId === selfUserIdRef.current) return;
-
             if (u.muted === true) {
               setRemoteMutedIds((prev) => prev.includes(u.userId) ? prev : [...prev, u.userId]);
             } else if (u.muted === false) {
               setRemoteMutedIds((prev) => prev.filter((id) => id !== u.userId));
-            }
-
-            if (u.bVideoOn === false || u.bVideoOn === true) {
-              const t = disconnectTimersRef.current.get(u.userId);
-              if (t) {
-                clearTimeout(t);
-                disconnectTimersRef.current.delete(u.userId);
-              }
-              if (u.bVideoOn === false) {
-                setRemoteCamOffIds((prev) => prev.includes(u.userId) ? prev : [...prev, u.userId]);
-              } else {
-                setRemoteCamOffIds((prev) => prev.filter((id) => id !== u.userId));
-              }
             }
           });
         }
@@ -536,14 +558,14 @@ export default function ZoomRoomInner({
         "active-share-change",
         async ({ state: shareState, userId: sharingUserId }: { state: "Active" | "Inactive"; userId: number }) => {
           if (destroyedRef.current || !shareCanvas) return;
-          if (shareState === "Active" && sharingUserId !== selfUserId) {
+          if (shareState === "Active" && sharingUserId !== selfId) {
             try {
               await stream.startShareView(shareCanvas, sharingUserId);
               setIsReceivingShare(true);
             } catch (e) {
               console.warn("[ZoomRoom] startShareView failed:", e);
             }
-          } else if (shareState === "Inactive" && sharingUserId !== selfUserId) {
+          } else if (shareState === "Inactive" && sharingUserId !== selfId) {
             try { await stream.stopShareView(); } catch { /* ignore */ }
             setIsReceivingShare(false);
           }
@@ -631,6 +653,7 @@ export default function ZoomRoomInner({
     try { if (streamRef.current) await streamRef.current.stopVideo(); } catch { /* ignore */ }
     try { if (streamRef.current) await streamRef.current.stopAudio(); } catch { /* ignore */ }
     try { if (clientRef.current) await clientRef.current.leave();     } catch { /* ignore */ }
+    setClient(null);
     setState("ended");
   }, []);
 
@@ -680,7 +703,6 @@ export default function ZoomRoomInner({
   // cleanup immediately, corrupting the SDK's WASM workers. Callers that need to
   // leave before remounting (retry) must use the onLeaveRef callback instead.
   useEffect(() => {
-    const disconnectTimers = disconnectTimersRef.current;
     return () => {
       destroyedRef.current = true;
       onLeaveRef?.(null); // invalidate parent's leave handle
@@ -690,8 +712,7 @@ export default function ZoomRoomInner({
       audioCtxRef.current?.close().catch(() => {});
       streamRef.current?.stopShareScreen().catch(() => {});
       streamRef.current?.stopShareView().catch(() => {});
-      disconnectTimers.forEach((t) => clearTimeout(t));
-      disconnectTimers.clear();
+      setClient(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -906,14 +927,16 @@ export default function ZoomRoomInner({
                   */}
                   <div ref={remoteMountRef} className="absolute inset-0" />
 
-                  {remoteUsers.length === 0 && <WaitingOverlay />}
-
-                  {/* Camera-off overlay for remote participant */}
-                  {remoteUsers.length > 0 && remoteCamOffIds.includes(remoteUsers[0].userId) && (
+                  {/* Render priority (first match wins): connection-lost > waiting > cam-off */}
+                  {remoteUsers.length > 0 && qos.remoteStatus === "lost" ? (
+                    <ConnectionLostOverlay />
+                  ) : remoteUsers.length === 0 ? (
+                    <WaitingOverlay />
+                  ) : remoteCamOffIds.includes(remoteUsers[0].userId) ? (
                     <CamOffOverlay />
-                  )}
+                  ) : null}
 
-                  {/* Voice / mute indicator — rendered last so it sits on top */}
+                  {/* Voice / mute indicator + poor-connection badge — top layer */}
                   <div className="absolute bottom-4 left-4">
                     {remoteUsers.length > 0 && remoteMutedIds.includes(remoteUsers[0].userId) ? (
                       <MutedMicIndicator />
@@ -923,6 +946,11 @@ export default function ZoomRoomInner({
                       />
                     )}
                   </div>
+                  {remoteUsers.length > 0 && qos.remoteStatus === "poor" && (
+                    <div className="absolute bottom-4 left-16">
+                      <PoorConnectionBadge />
+                    </div>
+                  )}
                 </section>
 
                 <div className="flex items-center gap-2 px-1">
@@ -950,8 +978,12 @@ export default function ZoomRoomInner({
                   {/* Always-present Zoom mount — video-player-container lives here */}
                   <div ref={localMountRef} className="absolute inset-0" />
 
-                  {/* Camera-off overlay — covers the frozen last frame */}
-                  {isCamOff && isConnected && <CamOffOverlay />}
+                  {/* Render priority (first match wins): reconnecting > cam-off */}
+                  {qos.selfStatus === "reconnecting" && isConnected ? (
+                    <ReconnectingOverlay />
+                  ) : isCamOff && isConnected ? (
+                    <CamOffOverlay />
+                  ) : null}
 
                   {/* Loading / joining state */}
                   {!isConnected && state !== "ended" && state !== "error" && (
@@ -960,7 +992,7 @@ export default function ZoomRoomInner({
                     </div>
                   )}
 
-                  {/* Voice / mute indicator */}
+                  {/* Voice / mute indicator + poor-connection badge */}
                   <div className="absolute bottom-4 left-4">
                     {isMuted ? (
                       <MutedMicIndicator />
@@ -968,6 +1000,11 @@ export default function ZoomRoomInner({
                       <VoiceBars active={activeSpeakers.includes(selfUserIdRef.current)} />
                     )}
                   </div>
+                  {qos.selfStatus === "poor" && isConnected && (
+                    <div className="absolute bottom-4 left-16">
+                      <PoorConnectionBadge />
+                    </div>
+                  )}
                 </section>
 
                 <div className="flex items-center gap-2 px-1">
