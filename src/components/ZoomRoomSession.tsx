@@ -226,6 +226,10 @@ export default function ZoomRoomInner({
   const joinedRef    = useRef(false);
   const destroyedRef = useRef(false);
 
+  // Per-user timer that fires if peer-video-state-change "Stop" arrives without a
+  // matching user-updated bVideoOn:false signal — i.e. an unannounced disconnect.
+  const disconnectTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+
   // ── Mount divs — ALWAYS in the DOM so refs are never null when makeVPC runs ─
   const localMountRef  = useRef<HTMLDivElement>(null);
   const remoteMountRef = useRef<HTMLDivElement>(null);
@@ -381,20 +385,40 @@ export default function ZoomRoomInner({
         "peer-video-state-change",
         async ({ action, userId }: { action: "Start" | "Stop"; userId: number }) => {
           if (!remoteVPC || destroyedRef.current) return;
+
+          // Any incoming video event invalidates a pending disconnect timer.
+          const existing = disconnectTimersRef.current.get(userId);
+          if (existing) {
+            clearTimeout(existing);
+            disconnectTimersRef.current.delete(userId);
+          }
+
           if (action === "Start") {
             await attachRemoteVideo(stream, remoteVPC, userId, VideoQuality);
             setRemoteCamOffIds((prev) => prev.filter((id) => id !== userId));
+            // Self-heal: if the disconnect timer already fired and removed the
+            // user, put them back from the SDK's participant list.
+            setRemoteUsers((prev) => {
+              if (prev.some((u) => u.userId === userId)) return prev;
+              const u = (client.getAllUser() as Array<{ userId: number; displayName?: string }>).find(
+                (x) => x.userId === userId
+              );
+              return u ? [...prev, { userId, displayName: u.displayName ?? "Participante" }] : prev;
+            });
           } else {
             await detachRemoteVideo(stream, remoteVPC, userId);
-            // Only mark cam-off if the user is still in the session. On disconnect
-            // the SDK fires this event but the participant is already out of
-            // getAllUser, so we should fall back to WaitingOverlay instead.
-            const stillInSession = (client.getAllUser() as Array<{ userId: number }>).some(
-              (u) => u.userId === userId
-            );
-            if (stillInSession) {
-              setRemoteCamOffIds((prev) => prev.includes(userId) ? prev : [...prev, userId]);
-            }
+            // Defer the cam-off decision: an intentional cam-off is followed by
+            // user-updated bVideoOn:false within the grace window (which sets
+            // remoteCamOffIds and cancels this timer). On disconnect that signal
+            // never arrives, so we proactively drop the user → WaitingOverlay.
+            const t = setTimeout(() => {
+              if (destroyedRef.current) return;
+              disconnectTimersRef.current.delete(userId);
+              setRemoteUsers((prev) => prev.filter((u) => u.userId !== userId));
+              setRemoteCamOffIds((prev) => prev.filter((id) => id !== userId));
+              setRemoteMutedIds((prev) => prev.filter((id) => id !== userId));
+            }, 1500);
+            disconnectTimersRef.current.set(userId, t);
           }
         }
       );
@@ -415,6 +439,14 @@ export default function ZoomRoomInner({
         async (users: Array<{ userId: number }>) => {
           if (destroyedRef.current) return;
           const removedIds = new Set(users.map((u) => u.userId));
+          // Cancel any pending disconnect timers for these users.
+          removedIds.forEach((id) => {
+            const t = disconnectTimersRef.current.get(id);
+            if (t) {
+              clearTimeout(t);
+              disconnectTimersRef.current.delete(id);
+            }
+          });
           // Update state first so WaitingOverlay renders immediately;
           // peer-video-state-change "Stop" has typically already detached the video,
           // so the detach below is a defensive cleanup.
@@ -429,18 +461,34 @@ export default function ZoomRoomInner({
         }
       );
 
-      // Track remote mute state changes. The Zoom SDK fires user-updated with partial
-      // payloads — only changed properties are present, so `muted` may be absent.
+      // Track remote mute / camera state changes. The SDK fires user-updated with
+      // partial payloads — only changed properties are present.
+      // bVideoOn:false here is the explicit "intentional cam-off" signal that
+      // distinguishes a deliberate camera stop from a disconnect.
       client.on(
         "user-updated",
-        (users: Array<{ userId: number; muted?: boolean }>) => {
+        (users: Array<{ userId: number; muted?: boolean; bVideoOn?: boolean }>) => {
           if (destroyedRef.current) return;
           users.forEach((u) => {
             if (u.userId === selfUserIdRef.current) return;
+
             if (u.muted === true) {
               setRemoteMutedIds((prev) => prev.includes(u.userId) ? prev : [...prev, u.userId]);
             } else if (u.muted === false) {
               setRemoteMutedIds((prev) => prev.filter((id) => id !== u.userId));
+            }
+
+            if (u.bVideoOn === false || u.bVideoOn === true) {
+              const t = disconnectTimersRef.current.get(u.userId);
+              if (t) {
+                clearTimeout(t);
+                disconnectTimersRef.current.delete(u.userId);
+              }
+              if (u.bVideoOn === false) {
+                setRemoteCamOffIds((prev) => prev.includes(u.userId) ? prev : [...prev, u.userId]);
+              } else {
+                setRemoteCamOffIds((prev) => prev.filter((id) => id !== u.userId));
+              }
             }
           });
         }
@@ -632,6 +680,7 @@ export default function ZoomRoomInner({
   // cleanup immediately, corrupting the SDK's WASM workers. Callers that need to
   // leave before remounting (retry) must use the onLeaveRef callback instead.
   useEffect(() => {
+    const disconnectTimers = disconnectTimersRef.current;
     return () => {
       destroyedRef.current = true;
       onLeaveRef?.(null); // invalidate parent's leave handle
@@ -641,6 +690,8 @@ export default function ZoomRoomInner({
       audioCtxRef.current?.close().catch(() => {});
       streamRef.current?.stopShareScreen().catch(() => {});
       streamRef.current?.stopShareView().catch(() => {});
+      disconnectTimers.forEach((t) => clearTimeout(t));
+      disconnectTimers.clear();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
