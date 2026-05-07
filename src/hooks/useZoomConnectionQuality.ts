@@ -106,6 +106,11 @@ interface UseZoomConnectionQualityOptions {
   client:        unknown | null;
   selfUserId:    number;
   remoteUserId:  number | null;
+  // When false, the remote has voluntarily turned off their camera, so the
+  // absence of inbound video decode events is expected — skip stall detection.
+  // Without this, turning off the remote's camera would falsely register as
+  // a lost connection after DECODE_STALL_AFTER_MS elapses.
+  remoteHasVideo?: boolean;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -114,7 +119,7 @@ type EventClient = { on: (e: string, fn: (p: any) => void) => void; off: (e: str
 export function useZoomConnectionQuality(
   opts: UseZoomConnectionQualityOptions
 ): ZoomConnectionQuality {
-  const { client, selfUserId, remoteUserId } = opts;
+  const { client, selfUserId, remoteUserId, remoteHasVideo = true } = opts;
 
   const [selfUplink,      setSelfUplink]      = useState<number | null>(null);
   const [selfDownlink,    setSelfDownlink]    = useState<number | null>(null);
@@ -206,6 +211,16 @@ export function useZoomConnectionQuality(
     remotePoorSinceRef.current = null;
   }, [remoteUserId]);
 
+  // ── Reset stall watchdog when the remote stops sending video ────────────────
+  // When the remote turns off their camera, fps stops arriving — that's
+  // expected, not a failure. Clearing the timestamp prevents decodeStalled
+  // from tripping; it'll re-arm naturally once frames flow again.
+  useEffect(() => {
+    if (!remoteHasVideo) {
+      lastDecodeAtRef.current = null;
+    }
+  }, [remoteHasVideo]);
+
   // ── Derived statuses ────────────────────────────────────────────────────────
   const now = Date.now();
 
@@ -221,6 +236,7 @@ export function useZoomConnectionQuality(
     remoteStatus = "unknown";
   } else {
     const decodeStalled =
+      remoteHasVideo &&
       lastDecodeAtRef.current !== null &&
       now - lastDecodeAtRef.current >= DECODE_STALL_AFTER_MS;
     const sustainedPoor =

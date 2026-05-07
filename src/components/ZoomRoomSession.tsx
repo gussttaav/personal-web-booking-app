@@ -273,14 +273,29 @@ export default function ZoomRoomInner({
   const [client,     setClient]     = useState<unknown | null>(null);
   const [selfUserId, setSelfUserId] = useState<number>(0);
 
+  // Primary remote — prefer a user whose camera is on. Handles the rejoin
+  // race where a stale userId (cam-off after the SDK detected a stalled
+  // stream) lingers in the roster for ~60 s alongside the freshly-joined
+  // userId. Without this, remoteUsers[0] would be the stale entry and
+  // CamOffOverlay would cover the new user's actual video.
+  const primaryRemote =
+    remoteUsers.find((u) => !remoteCamOffIds.includes(u.userId)) ??
+    remoteUsers[0] ??
+    null;
+
   // Network quality + lost-connection detection. The returned `qos` object also
   // exposes raw QoS snapshots (rtt/jitter/loss/fps/bitrate/...) for a future
   // Settings panel — pass `qos` as a prop when that panel is built.
-  const remoteUserIdForQos = remoteUsers.length > 0 ? remoteUsers[0].userId : null;
+  // remoteHasVideo gates decode-stall detection so an intentional cam-off
+  // on the remote side isn't misread as a connection loss.
+  const remoteUserIdForQos = primaryRemote?.userId ?? null;
+  const remoteHasVideo =
+    primaryRemote !== null && !remoteCamOffIds.includes(primaryRemote.userId);
   const qos = useZoomConnectionQuality({
     client,
     selfUserId,
     remoteUserId: remoteUserIdForQos,
+    remoteHasVideo,
   });
 
   const tokenRef       = useRef<TokenResponse | null>(null);
@@ -505,10 +520,24 @@ export default function ZoomRoomInner({
             .filter((u) => u.userId !== selfUserIdRef.current)
             .map((u) => ({ userId: u.userId, displayName: u.displayName ?? "Participante" }));
           if (newOthers.length === 0) return;
+
+          // Reconcile with the SDK's authoritative roster so state doesn't
+          // accumulate ghost users from a previous session if `user-removed`
+          // was delayed. Without this, a rejoin-before-heartbeat-expires
+          // race would leave the stale userId in remoteUsers/camOff/muted.
+          const sdkIds = new Set(
+            (client.getAllUser() as Array<{ userId: number }>)
+              .filter((u) => u.userId !== selfUserIdRef.current)
+              .map((u) => u.userId)
+          );
+
           // Idempotent: peer-video-state-change "Start" may have already added
           // the user via self-heal; merge instead of blindly appending.
           setRemoteUsers((prev) => {
-            const byId = new Map(prev.map((u) => [u.userId, u]));
+            const byId = new Map<number, { userId: number; displayName: string }>();
+            for (const u of prev) {
+              if (sdkIds.has(u.userId)) byId.set(u.userId, u);
+            }
             for (const u of newOthers) {
               const existing = byId.get(u.userId);
               if (!existing || existing.displayName === "Participante") {
@@ -517,6 +546,8 @@ export default function ZoomRoomInner({
             }
             return Array.from(byId.values());
           });
+          setRemoteCamOffIds((prev) => prev.filter((id) => sdkIds.has(id)));
+          setRemoteMutedIds((prev) => prev.filter((id) => sdkIds.has(id)));
         }
       );
 
@@ -971,20 +1002,20 @@ export default function ZoomRoomInner({
                   <div ref={remoteMountRef} className="absolute inset-0" />
 
                   {/* Render priority (first match wins): connection-lost > waiting > cam-off */}
-                  {remoteUsers.length > 0 && qos.remoteStatus === "lost" ? (
+                  {primaryRemote && qos.remoteStatus === "lost" ? (
                     <ConnectionLostOverlay />
-                  ) : remoteUsers.length === 0 ? (
+                  ) : !primaryRemote ? (
                     <WaitingOverlay />
-                  ) : remoteCamOffIds.includes(remoteUsers[0].userId) ? (
+                  ) : remoteCamOffIds.includes(primaryRemote.userId) ? (
                     <CamOffOverlay />
                   ) : null}
 
                   {/* Voice / mute indicator + poor-connection badge — hidden
                       while ConnectionLostOverlay is shown. */}
-                  {remoteUsers.length > 0 && qos.remoteStatus !== "lost" && (
+                  {primaryRemote && qos.remoteStatus !== "lost" && (
                     <>
                       <div className="absolute bottom-4 left-4">
-                        {remoteMutedIds.includes(remoteUsers[0].userId) ? (
+                        {remoteMutedIds.includes(primaryRemote.userId) ? (
                           <MutedMicIndicator />
                         ) : (
                           <VoiceBars
@@ -1002,11 +1033,11 @@ export default function ZoomRoomInner({
                 </section>
 
                 <div className="flex items-center gap-2 px-1">
-                  {remoteUsers.length > 0 ? (
+                  {primaryRemote ? (
                     <>
                       <span className="w-2 h-2 rounded-full bg-[#4edea3] animate-pulse" />
                       <span className="font-headline font-bold text-xs uppercase tracking-widest text-[#4edea3]">
-                        {remoteUsers[0].displayName}
+                        {primaryRemote.displayName}
                       </span>
                     </>
                   ) : (
