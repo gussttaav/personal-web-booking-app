@@ -465,18 +465,31 @@ export default function ZoomRoomInner({
         async ({ action, userId }: { action: "Start" | "Stop"; userId: number }) => {
           if (!remoteVPC || destroyedRef.current) return;
           if (action === "Start") {
-            await attachRemoteVideo(stream, remoteVPC, userId, VideoQuality);
-            setRemoteCamOffIds((prev) => prev.filter((id) => id !== userId));
-            // Self-heal: on reconnect the SDK fires Start without re-firing
-            // user-added, so remoteUsers can be empty here. Without this, the
-            // WaitingOverlay would render on top of the freshly attached video.
-            setRemoteUsers((prev) => {
-              if (prev.some((u) => u.userId === userId)) return prev;
-              const u = (client.getAllUser() as Array<{ userId: number; displayName?: string }>).find(
-                (x) => x.userId === userId
-              );
-              return u ? [...prev, { userId, displayName: u.displayName ?? "Participante" }] : prev;
+            // Sync state from the SDK BEFORE awaiting attachVideo so the render
+            // that happens while attachVideo runs already has the correct user
+            // list (otherwise WaitingOverlay would briefly overlap the video).
+            // Also prunes stale entries from a previous session — when the same
+            // person leaves and rejoins, Zoom assigns a new userId, and the old
+            // userId left in remoteCamOffIds would otherwise win the cam-off
+            // render check.
+            const sdkOthers = (client.getAllUser() as Array<{ userId: number; displayName?: string }>)
+              .filter((u) => u.userId !== selfUserIdRef.current);
+            const validIds = new Set(sdkOthers.map((u) => u.userId));
+            validIds.add(userId);
+            setRemoteUsers(() => {
+              const items = sdkOthers.map((u) => ({
+                userId: u.userId,
+                displayName: u.displayName ?? "Participante",
+              }));
+              if (!items.some((u) => u.userId === userId)) {
+                items.push({ userId, displayName: "Participante" });
+              }
+              return items;
             });
+            setRemoteCamOffIds((prev) => prev.filter((id) => validIds.has(id) && id !== userId));
+            setRemoteMutedIds((prev) => prev.filter((id) => validIds.has(id)));
+
+            await attachRemoteVideo(stream, remoteVPC, userId, VideoQuality);
           } else {
             await detachRemoteVideo(stream, remoteVPC, userId);
             setRemoteCamOffIds((prev) => prev.includes(userId) ? prev : [...prev, userId]);
@@ -491,7 +504,19 @@ export default function ZoomRoomInner({
           const newOthers = users
             .filter((u) => u.userId !== selfUserIdRef.current)
             .map((u) => ({ userId: u.userId, displayName: u.displayName ?? "Participante" }));
-          if (newOthers.length > 0) setRemoteUsers((prev) => [...prev, ...newOthers]);
+          if (newOthers.length === 0) return;
+          // Idempotent: peer-video-state-change "Start" may have already added
+          // the user via self-heal; merge instead of blindly appending.
+          setRemoteUsers((prev) => {
+            const byId = new Map(prev.map((u) => [u.userId, u]));
+            for (const u of newOthers) {
+              const existing = byId.get(u.userId);
+              if (!existing || existing.displayName === "Participante") {
+                byId.set(u.userId, u);
+              }
+            }
+            return Array.from(byId.values());
+          });
         }
       );
 
@@ -954,20 +979,25 @@ export default function ZoomRoomInner({
                     <CamOffOverlay />
                   ) : null}
 
-                  {/* Voice / mute indicator + poor-connection badge — top layer */}
-                  <div className="absolute bottom-4 left-4">
-                    {remoteUsers.length > 0 && remoteMutedIds.includes(remoteUsers[0].userId) ? (
-                      <MutedMicIndicator />
-                    ) : (
-                      <VoiceBars
-                        active={remoteUsers.some((u) => activeSpeakers.includes(u.userId))}
-                      />
-                    )}
-                  </div>
-                  {remoteUsers.length > 0 && qos.remoteStatus === "poor" && (
-                    <div className="absolute bottom-4 left-16">
-                      <PoorConnectionBadge />
-                    </div>
+                  {/* Voice / mute indicator + poor-connection badge — hidden
+                      while ConnectionLostOverlay is shown. */}
+                  {remoteUsers.length > 0 && qos.remoteStatus !== "lost" && (
+                    <>
+                      <div className="absolute bottom-4 left-4">
+                        {remoteMutedIds.includes(remoteUsers[0].userId) ? (
+                          <MutedMicIndicator />
+                        ) : (
+                          <VoiceBars
+                            active={remoteUsers.some((u) => activeSpeakers.includes(u.userId))}
+                          />
+                        )}
+                      </div>
+                      {qos.remoteStatus === "poor" && (
+                        <div className="absolute bottom-4 left-16">
+                          <PoorConnectionBadge />
+                        </div>
+                      )}
+                    </>
                   )}
                 </section>
 
