@@ -414,6 +414,12 @@ export default function ZoomRoomInner({
       if (videoResult instanceof Error) {
         console.warn("[ZoomRoom] startVideo warning:", videoResult.message);
       }
+
+      // The Zoom SDK requires explicit opt-in for *-statistic-data-change events.
+      // Without these calls, useZoomConnectionQuality's decode-stall detection
+      // (and the future Settings stats panel) never receive any data.
+      try { await stream.subscribeVideoStatisticData(); } catch (e) { console.warn("[ZoomRoom] subscribeVideoStatisticData:", e); }
+      try { await stream.subscribeAudioStatisticData(); } catch (e) { console.warn("[ZoomRoom] subscribeAudioStatisticData:", e); }
       if (destroyedRef.current) return;
 
       // ── CRITICAL: Wait for bVideoOn to become true ──
@@ -461,6 +467,16 @@ export default function ZoomRoomInner({
           if (action === "Start") {
             await attachRemoteVideo(stream, remoteVPC, userId, VideoQuality);
             setRemoteCamOffIds((prev) => prev.filter((id) => id !== userId));
+            // Self-heal: on reconnect the SDK fires Start without re-firing
+            // user-added, so remoteUsers can be empty here. Without this, the
+            // WaitingOverlay would render on top of the freshly attached video.
+            setRemoteUsers((prev) => {
+              if (prev.some((u) => u.userId === userId)) return prev;
+              const u = (client.getAllUser() as Array<{ userId: number; displayName?: string }>).find(
+                (x) => x.userId === userId
+              );
+              return u ? [...prev, { userId, displayName: u.displayName ?? "Participante" }] : prev;
+            });
           } else {
             await detachRemoteVideo(stream, remoteVPC, userId);
             setRemoteCamOffIds((prev) => prev.includes(userId) ? prev : [...prev, userId]);
@@ -650,6 +666,8 @@ export default function ZoomRoomInner({
     audioCtxRef.current?.close().catch(() => {});
     try { if (streamRef.current) await streamRef.current.stopShareScreen(); } catch { /* ignore */ }
     try { if (streamRef.current) await streamRef.current.stopShareView();   } catch { /* ignore */ }
+    try { if (streamRef.current) await streamRef.current.unsubscribeVideoStatisticData(); } catch { /* ignore */ }
+    try { if (streamRef.current) await streamRef.current.unsubscribeAudioStatisticData(); } catch { /* ignore */ }
     try { if (streamRef.current) await streamRef.current.stopVideo(); } catch { /* ignore */ }
     try { if (streamRef.current) await streamRef.current.stopAudio(); } catch { /* ignore */ }
     try { if (clientRef.current) await clientRef.current.leave();     } catch { /* ignore */ }
