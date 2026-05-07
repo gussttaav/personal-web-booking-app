@@ -57,6 +57,24 @@ type RoomState = "loading" | "ready" | "joining" | "connected" | "ended" | "erro
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
+function playMessageSound() {
+  try {
+    const ctx  = new AudioContext();
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+    osc.onended = () => void ctx.close();
+  } catch { /* Web Audio unavailable */ }
+}
+
 function Spinner() {
   return (
     <div
@@ -260,6 +278,7 @@ export default function ZoomRoomInner({
   const [isMuted, setIsMuted]         = useState(false);
   const [isCamOff, setIsCamOff]       = useState(false);
   const [isChatOpen, setIsChatOpen]   = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [activeSpeakers, setActiveSpeakers] = useState<number[]>([]);
   const [remoteUsers, setRemoteUsers] = useState<
     Array<{ userId: number; displayName: string }>
@@ -1103,13 +1122,16 @@ export default function ZoomRoomInner({
             </div>
           </div>
 
-          {/* ── Chat sidebar (desktop) ── constrained to main height by flex layout ── */}
-          {isChatOpen && isConnected && (
-            <div className="hidden md:flex">
+          {/* ── Chat sidebar (desktop) ── always mounted when connected so the SSE
+               connection stays active for unread-count tracking even when closed.
+               Visibility is controlled via CSS (hidden vs md:flex). ── */}
+          {isConnected && (
+            <div className={isChatOpen ? "hidden md:flex" : "hidden"}>
               <SessionChat
                 eventId={eventId}
                 userName={userName}
                 onClose={() => setIsChatOpen(false)}
+                onNewMessage={() => { playMessageSound(); if (!isChatOpen) setUnreadCount((n) => n + 1); }}
               />
             </div>
           )}
@@ -1201,12 +1223,22 @@ export default function ZoomRoomInner({
 
           {/* Chat toggle — pushed to the far right by flex-1 on the controls group */}
           <button
-            onClick={() => setIsChatOpen((v) => !v)}
-            className="bg-surface-container-high hover:bg-surface-container-highest w-12 h-12 rounded-xl flex items-center justify-center shadow-lg border border-white/5 transition-all active:scale-90"
+            onClick={() => {
+              setIsChatOpen((v) => {
+                if (!v) setUnreadCount(0);
+                return !v;
+              });
+            }}
+            className="relative bg-surface-container-high hover:bg-surface-container-highest w-12 h-12 rounded-xl flex items-center justify-center shadow-lg border border-white/5 transition-all active:scale-90"
             style={{ color: "#4edea3" }}
             aria-label={isChatOpen ? "Cerrar chat" : "Abrir chat"}
           >
             <span className="material-symbols-outlined text-xl">chat</span>
+            {unreadCount > 0 && !isChatOpen && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#fc7c78] text-[8px] font-bold text-white flex items-center justify-center leading-none">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
           </button>
         </div>
 

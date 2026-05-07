@@ -4,12 +4,13 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import type { ChatMessage } from "@/app/api/chat-session/route";
 
 interface SessionChatProps {
-  eventId:  string;
-  userName: string;
-  onClose:  () => void;
+  eventId:       string;
+  userName:      string;
+  onClose:       () => void;
+  onNewMessage?: () => void;
 }
 
-export default function SessionChat({ eventId, userName, onClose }: SessionChatProps) {
+export default function SessionChat({ eventId, userName, onClose, onNewMessage }: SessionChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput]       = useState("");
   const [sending, setSending]   = useState(false);
@@ -35,6 +36,7 @@ export default function SessionChat({ eventId, userName, onClose }: SessionChatP
             return [...prev, msg];
           });
           cursorRef.current += 1;
+          if (msg.senderName !== userName) onNewMessage?.();
         } catch {
           /* malformed message — ignore */
         }
@@ -128,7 +130,7 @@ export default function SessionChat({ eventId, userName, onClose }: SessionChatP
 
       {/* Input */}
       <div className="p-4 border-t border-white/5">
-        <div className="relative">
+        <div className="flex items-center gap-2">
           <input
             type="text"
             value={input}
@@ -136,8 +138,20 @@ export default function SessionChat({ eventId, userName, onClose }: SessionChatP
             onKeyDown={handleKeyDown}
             placeholder="Escribe un mensaje..."
             disabled={sending}
-            className="w-full bg-surface-container-lowest border-none rounded-xl text-xs py-2 px-3 text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-[#4edea3]/50 focus:outline-none"
+            className="flex-1 bg-surface-container-lowest border-none rounded-xl text-xs py-2 px-3 text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-[#4edea3]/50 focus:outline-none"
           />
+          <button
+            onClick={() => { void send(); }}
+            disabled={sending || !input.trim()}
+            aria-label="Enviar mensaje"
+            className="p-1.5 rounded-lg bg-[#4edea3] disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shrink-0"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="#0d0f10" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          </button>
         </div>
       </div>
     </aside>
