@@ -18,6 +18,14 @@ export default function SessionChat({ eventId, userName, onClose, onNewMessage }
   const cursorRef               = useRef(0);
   const esRef                   = useRef<EventSource | null>(null);
 
+  // Refs mirror props/callbacks so the SSE listener always sees the latest
+  // values. The useEffect below has deps [eventId], so without these refs the
+  // closure would capture the FIRST onNewMessage and userName forever.
+  const onNewMessageRef = useRef(onNewMessage);
+  const userNameRef     = useRef(userName);
+  useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
+  useEffect(() => { userNameRef.current     = userName;     }, [userName]);
+
   // ── SSE connection — auto-reconnects via EventSource ──────────────────────
   useEffect(() => {
     function connect() {
@@ -30,13 +38,17 @@ export default function SessionChat({ eventId, userName, onClose, onNewMessage }
       es.addEventListener("message", (e: MessageEvent<string>) => {
         try {
           const msg = JSON.parse(e.data) as ChatMessage;
+          let isNew = false;
           setMessages((prev) => {
             // Deduplicate by id (can arrive twice on reconnect if cursor lags)
             if (prev.some((m) => m.id === msg.id)) return prev;
+            isNew = true;
             return [...prev, msg];
           });
           cursorRef.current += 1;
-          if (msg.senderName !== userName) onNewMessage?.();
+          if (isNew && msg.senderName !== userNameRef.current) {
+            onNewMessageRef.current?.();
+          }
         } catch {
           /* malformed message — ignore */
         }

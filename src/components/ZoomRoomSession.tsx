@@ -57,21 +57,27 @@ type RoomState = "loading" | "ready" | "joining" | "connected" | "ended" | "erro
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
+// Shared AudioContext for the notification ding. A fresh AudioContext often
+// starts in "suspended" state outside an explicit user gesture, which silently
+// drops osc.start() — we resume() defensively before each use.
+let notifyCtx: AudioContext | null = null;
 function playMessageSound() {
   try {
-    const ctx  = new AudioContext();
+    if (!notifyCtx) notifyCtx = new AudioContext();
+    const ctx = notifyCtx;
+    if (ctx.state === "suspended") void ctx.resume();
+    const t    = ctx.currentTime;
     const osc  = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.type = "sine";
-    osc.frequency.setValueAtTime(880, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.12);
-    gain.gain.setValueAtTime(0.25, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.3);
-    osc.onended = () => void ctx.close();
+    osc.frequency.setValueAtTime(880, t);
+    osc.frequency.exponentialRampToValueAtTime(440, t + 0.12);
+    gain.gain.setValueAtTime(0.25, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    osc.start(t);
+    osc.stop(t + 0.3);
   } catch { /* Web Audio unavailable */ }
 }
 
