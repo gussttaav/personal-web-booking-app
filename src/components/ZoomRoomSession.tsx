@@ -28,6 +28,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import SessionChat from "./SessionChat";
+import type { ChatMessage } from "@/app/api/chat-session/route";
 import { useZoomConnectionQuality } from "@/hooks/useZoomConnectionQuality";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -883,6 +884,33 @@ export default function ZoomRoomInner({
     };
   }, []);
 
+  // ── Chat SSE watcher — independent of SessionChat ────────────────────────
+  // A dedicated SSE listener for badge + sound, active for the entire session.
+  // SessionChat is only mounted while the panel is open, so it cannot detect
+  // messages that arrive while closed; this watcher fills that gap.
+  // isChatOpenRef mirrors the live value so the listener (set up once) always
+  // reads the current state without re-subscribing.
+  const isChatOpenRef = useRef(isChatOpen);
+  useEffect(() => { isChatOpenRef.current = isChatOpen; }, [isChatOpen]);
+
+  useEffect(() => {
+    if (state !== "connected") return;
+    const seenIds = new Set<string>();
+    const url = `/api/chat-session?eventId=${encodeURIComponent(eventId)}`;
+    const es  = new EventSource(url);
+    es.addEventListener("message", (e: MessageEvent<string>) => {
+      try {
+        const msg = JSON.parse(e.data) as ChatMessage;
+        if (seenIds.has(msg.id)) return;
+        seenIds.add(msg.id);
+        if (msg.senderName === userName) return;  // own message — skip
+        playMessageSound();
+        if (!isChatOpenRef.current) setUnreadCount((n) => n + 1);
+      } catch { /* malformed — ignore */ }
+    });
+    return () => { es.close(); };
+  }, [state, eventId, userName]);
+
   // ── Notify parent when session is fully connected ─────────────────────────
   // 500ms delay ensures the video element has had time to start rendering.
   useEffect(() => {
@@ -1128,16 +1156,13 @@ export default function ZoomRoomInner({
             </div>
           </div>
 
-          {/* ── Chat sidebar (desktop) ── always mounted when connected so the SSE
-               connection stays active for unread-count tracking even when closed.
-               Visibility is controlled via CSS (hidden vs md:flex). ── */}
-          {isConnected && (
-            <div className={isChatOpen ? "hidden md:flex" : "hidden"}>
+          {/* ── Chat sidebar (desktop) ── constrained to main height by flex layout ── */}
+          {isChatOpen && isConnected && (
+            <div className="hidden md:flex">
               <SessionChat
                 eventId={eventId}
                 userName={userName}
                 onClose={() => setIsChatOpen(false)}
-                onNewMessage={() => { playMessageSound(); if (!isChatOpen) setUnreadCount((n) => n + 1); }}
               />
             </div>
           )}
