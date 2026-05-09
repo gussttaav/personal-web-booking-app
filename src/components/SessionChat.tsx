@@ -4,52 +4,16 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import type { ChatMessage } from "@/app/api/chat-session/route";
 
 interface SessionChatProps {
-  eventId:  string;
+  messages: ChatMessage[];
   userName: string;
+  onSend:   (text: string) => Promise<void>;
   onClose:  () => void;
 }
 
-export default function SessionChat({ eventId, userName, onClose }: SessionChatProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput]       = useState("");
-  const [sending, setSending]   = useState(false);
-  const bottomRef               = useRef<HTMLDivElement>(null);
-  const cursorRef               = useRef(0);
-  const esRef                   = useRef<EventSource | null>(null);
-
-  // ── SSE connection — auto-reconnects via EventSource ──────────────────────
-  useEffect(() => {
-    function connect() {
-      if (esRef.current) esRef.current.close();
-
-      const url = `/api/chat-session?eventId=${encodeURIComponent(eventId)}`;
-      const es  = new EventSource(url);
-      esRef.current = es;
-
-      es.addEventListener("message", (e: MessageEvent<string>) => {
-        try {
-          const msg = JSON.parse(e.data) as ChatMessage;
-          setMessages((prev) => {
-            // Deduplicate by id (can arrive twice on reconnect if cursor lags)
-            if (prev.some((m) => m.id === msg.id)) return prev;
-            return [...prev, msg];
-          });
-          cursorRef.current += 1;
-        } catch {
-          /* malformed message — ignore */
-        }
-      });
-
-      // On error EventSource retries automatically; nothing to do here
-    }
-
-    connect();
-
-    return () => {
-      esRef.current?.close();
-      esRef.current = null;
-    };
-  }, [eventId]);
+export default function SessionChat({ messages, userName, onSend, onClose }: SessionChatProps) {
+  const [input, setInput]     = useState("");
+  const [sending, setSending] = useState(false);
+  const bottomRef             = useRef<HTMLDivElement>(null);
 
   // ── Auto-scroll to bottom ──────────────────────────────────────────────────
   useEffect(() => {
@@ -60,22 +24,16 @@ export default function SessionChat({ eventId, userName, onClose }: SessionChatP
   const send = useCallback(async () => {
     const text = input.trim();
     if (!text || sending) return;
-
     setSending(true);
     setInput("");
-
     try {
-      await fetch("/api/chat-session", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ eventId, text }),
-      });
+      await onSend(text);
     } catch {
       /* network error — message lost, non-fatal */
     } finally {
       setSending(false);
     }
-  }, [eventId, input, sending]);
+  }, [input, sending, onSend]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {

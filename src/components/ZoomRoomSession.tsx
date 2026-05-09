@@ -27,8 +27,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import SessionChat from "./SessionChat";
-import type { ChatMessage } from "@/app/api/chat-session/route";
+import { useSessionChatStream } from "@/hooks/useSessionChatStream";
 import { useZoomConnectionQuality } from "@/hooks/useZoomConnectionQuality";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -884,32 +885,24 @@ export default function ZoomRoomInner({
     };
   }, []);
 
-  // ── Chat SSE watcher — independent of SessionChat ────────────────────────
-  // A dedicated SSE listener for badge + sound, active for the entire session.
-  // SessionChat is only mounted while the panel is open, so it cannot detect
-  // messages that arrive while closed; this watcher fills that gap.
-  // isChatOpenRef mirrors the live value so the listener (set up once) always
-  // reads the current state without re-subscribing.
+  // ── Chat stream — single SSE owner shared with SessionChat ────────────────
+  // Lifting the SSE up here (instead of letting SessionChat own it) means a
+  // single connection drives both the chat UI AND the badge/sound, so there's
+  // no "second EventSource that mysteriously fails" failure mode.
+  const { data: nextAuthSession } = useSession();
+  const userEmail = nextAuthSession?.user?.email ?? undefined;
+  const chat = useSessionChatStream(eventId, userEmail, state === "connected");
+
+  // isChatOpenRef mirrors the live value so the lastIncoming reaction reads
+  // the current chat-panel state without re-subscribing.
   const isChatOpenRef = useRef(isChatOpen);
   useEffect(() => { isChatOpenRef.current = isChatOpen; }, [isChatOpen]);
 
   useEffect(() => {
-    if (state !== "connected") return;
-    const seenIds = new Set<string>();
-    const url = `/api/chat-session?eventId=${encodeURIComponent(eventId)}`;
-    const es  = new EventSource(url);
-    es.addEventListener("message", (e: MessageEvent<string>) => {
-      try {
-        const msg = JSON.parse(e.data) as ChatMessage;
-        if (seenIds.has(msg.id)) return;
-        seenIds.add(msg.id);
-        if (msg.senderName === userName) return;  // own message — skip
-        playMessageSound();
-        if (!isChatOpenRef.current) setUnreadCount((n) => n + 1);
-      } catch { /* malformed — ignore */ }
-    });
-    return () => { es.close(); };
-  }, [state, eventId, userName]);
+    if (!chat.lastIncoming) return;
+    playMessageSound();
+    if (!isChatOpenRef.current) setUnreadCount((n) => n + 1);
+  }, [chat.lastIncoming]);
 
   // ── Notify parent when session is fully connected ─────────────────────────
   // 500ms delay ensures the video element has had time to start rendering.
@@ -1160,8 +1153,9 @@ export default function ZoomRoomInner({
           {isChatOpen && isConnected && (
             <div className="hidden md:flex">
               <SessionChat
-                eventId={eventId}
+                messages={chat.messages}
                 userName={userName}
+                onSend={chat.send}
                 onClose={() => setIsChatOpen(false)}
               />
             </div>
@@ -1173,8 +1167,9 @@ export default function ZoomRoomInner({
           <div className="md:hidden fixed inset-0 z-[65] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 mobile-chat-overlay">
             <div className="w-full max-w-sm h-[70vh] max-h-[500px]">
               <SessionChat
-                eventId={eventId}
+                messages={chat.messages}
                 userName={userName}
+                onSend={chat.send}
                 onClose={() => setIsChatOpen(false)}
               />
             </div>
