@@ -3,7 +3,8 @@
 # Triggered by a successful Vercel deployment of the `staging` branch.
 # Vercel's GitHub integration fires the `deployment_status` event when a
 # deployment finishes; this workflow filters on state == success and
-# ref == staging, then runs Playwright against staging.gustavoai.dev.
+# environment_url containing staging.gustavoai.dev (Vercel sets the ref to
+# the commit SHA, not the branch name, so branch filtering is unreliable).
 #
 # App-level env vars (AUTH_SECRET, STRIPE_*, UPSTASH_*, ZOOM_*, etc.) are
 # already present in the Vercel staging environment — they do NOT need to
@@ -42,7 +43,7 @@ jobs:
   e2e:
     if: >
       github.event.deployment_status.state == 'success' &&
-      github.event.deployment.ref == 'staging'
+      contains(github.event.deployment_status.environment_url, 'staging.gustavoai.dev')
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
