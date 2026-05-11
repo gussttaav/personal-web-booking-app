@@ -1,10 +1,13 @@
 # TEST-02: E2E tests with Playwright
 #
 # Triggered by a successful Vercel deployment of the `staging` branch.
-# Vercel's GitHub integration fires the `deployment_status` event when a
-# deployment finishes; this workflow filters on state == success and
-# environment_url containing staging.gustavoai.dev (Vercel sets the ref to
-# the commit SHA, not the branch name, so branch filtering is unreliable).
+# Vercel's GitHub integration fires `deployment_status` for every preview
+# deployment (feature branches and staging alike) and the event itself
+# doesn't carry the branch name — `deployment.ref` is the commit SHA,
+# `environment` is just "Preview", and `environment_url` is the auto-
+# generated *.vercel.app URL (not the custom domain). So the `check-staging`
+# job resolves the SHA → branch via the GitHub API, and only when the SHA
+# is currently the HEAD of the `staging` branch does the `e2e` job run.
 #
 # App-level env vars (AUTH_SECRET, STRIPE_*, UPSTASH_*, ZOOM_*, etc.) are
 # already present in the Vercel staging environment — they do NOT need to
@@ -40,29 +43,32 @@ on:
   deployment_status:
 
 jobs:
+  check-staging:
+    if: >
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment_status.environment == 'Preview'
+    runs-on: ubuntu-latest
+    outputs:
+      is_staging: ${{ steps.check.outputs.is_staging }}
+    steps:
+      - name: Resolve deployed SHA to branch
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          IS_STAGING=$(gh api \
+            "repos/${{ github.repository }}/commits/${{ github.event.deployment.sha }}/branches-where-head" \
+            --jq 'any(.name == "staging")')
+          echo "is_staging=$IS_STAGING" >> "$GITHUB_OUTPUT"
+          echo "deployed SHA ${{ github.event.deployment.sha }} → staging HEAD? $IS_STAGING"
+
   e2e:
-    if: github.event.deployment_status.state == 'success'
+    needs: check-staging
+    if: needs.check-staging.outputs.is_staging == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
-      - name: Debug deployment_status event
-        run: |
-          echo "── deployment_status.state ──"
-          echo "${{ github.event.deployment_status.state }}"
-          echo "── deployment_status.environment ──"
-          echo "${{ github.event.deployment_status.environment }}"
-          echo "── deployment_status.environment_url ──"
-          echo "${{ github.event.deployment_status.environment_url }}"
-          echo "── deployment_status.target_url ──"
-          echo "${{ github.event.deployment_status.target_url }}"
-          echo "── deployment.ref ──"
-          echo "${{ github.event.deployment.ref }}"
-          echo "── deployment.environment ──"
-          echo "${{ github.event.deployment.environment }}"
-          echo "── deployment.payload ──"
-          echo '${{ toJSON(github.event.deployment.payload) }}'
-
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
