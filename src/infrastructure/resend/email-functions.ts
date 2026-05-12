@@ -30,11 +30,15 @@ function escapeHtml(str: string): string {
 // ─── Internal send ────────────────────────────────────────────────────────────
 
 async function send(payload: { to: string; subject: string; html: string }): Promise<void> {
-  // Skip outbound email entirely under E2E_MODE so Playwright runs don't consume
-  // the Resend daily quota. Tests don't assert on email delivery — they use the
-  // in-app success states and (for cancel-link flows) a token from the API.
-  if (process.env.E2E_MODE === "true") {
-    console.info(`[email] E2E_MODE — skipped send to ${payload.to}`);
+  // Skip outbound email when the recipient is a known E2E test account, so
+  // Playwright runs don't consume the Resend daily quota. Real users on the
+  // same deployment (e.g. manual smoke-tests on staging) still receive emails.
+  const testRecipients = (process.env.E2E_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean);
+  if (testRecipients.includes(payload.to)) {
+    console.info(`[email] test recipient — skipped send to ${payload.to}`);
     return;
   }
 
