@@ -284,6 +284,43 @@ export async function sendCancellationNotificationEmail(params: {
   }, params.studentEmail);
 }
 
+// ─── Dead-letter failure notification (Gustavo) ──────────────────────────────
+
+export async function sendDeadLetterNotificationEmail(params: {
+  studentEmail: string;
+  stripeSessionId: string;
+  userId: string;
+  startIso: string;
+  error: string;
+}): Promise<void> {
+  const notifyEmail = process.env.NOTIFY_EMAIL;
+  if (!notifyEmail) return;
+
+  const safeSessionId = escapeHtml(params.stripeSessionId);
+  const safeUserId    = escapeHtml(params.userId);
+  const safeStartIso  = escapeHtml(params.startIso);
+  const safeError     = escapeHtml(params.error);
+
+  await send({
+    to: notifyEmail,
+    subject: `⚠️ Reserva fallida — acción manual requerida`,
+    html: `
+      <html><head><style>${STYLES}</style></head><body>
+      <div class="wrap"><div class="card">
+        <h1>Reserva fallida</h1>
+        <p>No se pudo crear el evento de calendario para la reserva <strong>${safeSessionId}</strong>.</p>
+        <div class="label">Usuario</div>
+        <div class="value">${safeUserId}</div>
+        <div class="label">Slot</div>
+        <div class="value">${safeStartIso}</div>
+        <div class="label">Error</div>
+        <div class="note-box"><p>${safeError}</p></div>
+        <p>El alumno ha pagado. Gestiona el reembolso o crea el evento manualmente.</p>
+      </div></div></body></html>
+    `,
+  }, params.studentEmail);
+}
+
 // ─── New booking notification (Gustavo) ───────────────────────────────────────
 
 export async function sendNewBookingNotificationEmail(params: {

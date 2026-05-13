@@ -17,6 +17,7 @@ import type { PackSize } from "@/domain/types";
 import type { IStripeClient } from "@/infrastructure/stripe/StripeClient";
 import { getAvailableSlots } from "@/infrastructure/google";
 import { log } from "@/lib/logger";
+import { sendDeadLetterNotificationEmail } from "@/infrastructure/resend/email-functions";
 import { CreditService } from "./CreditService";
 import { BookingService } from "./BookingService";
 import { UserService } from "./UserService";
@@ -378,7 +379,7 @@ export class PaymentService {
       log("info", "Single session booked", { service: "payment", email, startIso });
     } catch (err) {
       log("error", "Booking failed after payment — writing dead-letter", { service: "payment", email, startIso, idempotencyKey, error: String(err) });
-      await this.writeDeadLetter(idempotencyKey, userId, startIso, err);
+      await this.writeDeadLetter(idempotencyKey, userId, startIso, err, email);
     }
   }
 
@@ -387,6 +388,7 @@ export class PaymentService {
     userId:          string,
     startIso:        string,
     error:           unknown,
+    studentEmail:    string,
   ): Promise<void> {
     try {
       await this.paymentRepo.recordFailedBooking({
@@ -399,23 +401,12 @@ export class PaymentService {
       log("error", "Failed to write dead-letter record", { service: "payment", stripeSessionId, error: String(kvErr) });
     }
 
-    const notifyEmail = process.env.NOTIFY_EMAIL;
-    if (notifyEmail) {
-      const apiKey = process.env.RESEND_API_KEY;
-      if (apiKey) {
-        fetch("https://api.resend.com/emails", {
-          method:  "POST",
-          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            from:    process.env.RESEND_FROM ?? "onboarding@resend.dev",
-            to:      notifyEmail,
-            subject: `⚠️ Reserva fallida — acción manual requerida`,
-            html: `<p>No se pudo crear el evento de calendario para la reserva <strong>${stripeSessionId}</strong>.</p>
-                   <p>Usuario: ${userId} · Slot: ${startIso}</p><p>Error: ${String(error)}</p>
-                   <p>El alumno ha pagado. Gestiona el reembolso o crea el evento manualmente.</p>`,
-          }),
-        }).catch(() => {});
-      }
-    }
+    await sendDeadLetterNotificationEmail({
+      studentEmail,
+      stripeSessionId,
+      userId,
+      startIso,
+      error: String(error),
+    }).catch(() => {});
   }
 }
