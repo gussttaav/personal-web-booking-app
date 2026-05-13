@@ -393,8 +393,9 @@ export class PaymentService {
       log("error", "Failed to write dead-letter record", { service: "payment", stripeSessionId, error: String(kvErr) });
     }
 
+    const testAccounts = (process.env.E2E_EMAILS ?? "").split(",").map((e) => e.trim()).filter(Boolean);
     const notifyEmail = process.env.NOTIFY_EMAIL;
-    if (notifyEmail) {
+    if (notifyEmail && !testAccounts.includes(email)) {
       const apiKey = process.env.RESEND_API_KEY;
       if (apiKey) {
         fetch("https://api.resend.com/emails", {
