@@ -1,18 +1,28 @@
 // DB-02: Integration tests for SupabasePaymentRepository.
 // Gated on SUPABASE_URL — skips in CI without a database configured.
 import { SupabasePaymentRepository } from "../SupabasePaymentRepository";
+import { SupabaseUserRepository }    from "../SupabaseUserRepository";
 import { supabase } from "../client";
 
 const describeDb = process.env.SUPABASE_URL ? describe : describe.skip;
 
 describeDb("SupabasePaymentRepository", () => {
-  const repo = new SupabasePaymentRepository();
-  const idempotencyKey    = `webhook_${Date.now()}`;
-  const stripeSessionId   = `cs_test_${Date.now()}`;
+  const repo     = new SupabasePaymentRepository();
+  const userRepo = new SupabaseUserRepository();
+
+  const idempotencyKey  = `webhook_${Date.now()}`;
+  const stripeSessionId = `cs_test_${Date.now()}`;
+  const testEmail       = `failed_${Date.now()}@example.com`;
+  let testUserId: string;
+
+  beforeAll(async () => {
+    testUserId = await userRepo.upsert(testEmail, "Test User");
+  });
 
   afterAll(async () => {
     await supabase.from("webhook_events").delete().eq("idempotency_key", idempotencyKey);
     await supabase.from("failed_bookings").delete().eq("stripe_session_id", stripeSessionId);
+    await supabase.from("users").delete().eq("email", testEmail);
   });
 
   it("isProcessed returns false before markProcessed", async () => {
@@ -33,7 +43,7 @@ describeDb("SupabasePaymentRepository", () => {
   it("recordFailedBooking + listFailedBookings + clearFailedBooking flow", async () => {
     const entry = {
       stripeSessionId,
-      email:    "failed@example.com",
+      userId:   testUserId,
       startIso: new Date(Date.now() + 86_400_000).toISOString(),
       failedAt: new Date().toISOString(),
       error:    "Calendar API 503",
@@ -41,10 +51,11 @@ describeDb("SupabasePaymentRepository", () => {
 
     await repo.recordFailedBooking(entry);
 
-    const list = await repo.listFailedBookings();
+    const list  = await repo.listFailedBookings();
     const found = list.find(e => e.stripeSessionId === stripeSessionId);
     expect(found).toBeDefined();
-    expect(found!.email).toBe("failed@example.com");
+    expect(found!.userId).toBe(testUserId);
+    expect(found!.email).toBe(testEmail);   // populated via JOIN
     expect(found!.error).toBe("Calendar API 503");
 
     await repo.clearFailedBooking(stripeSessionId);

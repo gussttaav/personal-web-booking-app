@@ -19,6 +19,7 @@ import { getAvailableSlots } from "@/infrastructure/google";
 import { log } from "@/lib/logger";
 import { CreditService } from "./CreditService";
 import { BookingService } from "./BookingService";
+import { UserService } from "./UserService";
 
 // ─── Public output types ──────────────────────────────────────────────────────
 
@@ -86,6 +87,7 @@ export class PaymentService {
     private readonly credits:      CreditService,
     private readonly bookings:     BookingService,
     private readonly paymentRepo:  IPaymentRepository,
+    private readonly userService:  UserService,
   ) {}
 
   // ── Checkout ───────────────────────────────────────────────────────────────
@@ -358,6 +360,10 @@ export class PaymentService {
 
     const sessionType = duration === "1h" ? "session1h" as const : "session2h" as const;
 
+    // Guarantee the user record exists before the booking attempt so the
+    // dead-letter entry can reference users.id even if createBooking fails.
+    const userId = await this.userService.ensureUser(email, name);
+
     try {
       await this.bookings.createBooking({
         email,
@@ -372,30 +378,29 @@ export class PaymentService {
       log("info", "Single session booked", { service: "payment", email, startIso });
     } catch (err) {
       log("error", "Booking failed after payment — writing dead-letter", { service: "payment", email, startIso, idempotencyKey, error: String(err) });
-      await this.writeDeadLetter(idempotencyKey, email, startIso, err);
+      await this.writeDeadLetter(idempotencyKey, userId, startIso, err);
     }
   }
 
   private async writeDeadLetter(
     stripeSessionId: string,
-    email:           string,
+    userId:          string,
     startIso:        string,
     error:           unknown,
   ): Promise<void> {
     try {
       await this.paymentRepo.recordFailedBooking({
-        stripeSessionId, email, startIso,
+        stripeSessionId, userId, startIso,
         failedAt: new Date().toISOString(),
         error:    String(error),
       });
-      log("error", "Dead-letter written for failed booking", { service: "payment", stripeSessionId, email, startIso });
+      log("error", "Dead-letter written for failed booking", { service: "payment", stripeSessionId, userId, startIso });
     } catch (kvErr) {
       log("error", "Failed to write dead-letter record", { service: "payment", stripeSessionId, error: String(kvErr) });
     }
 
-    const testAccounts = (process.env.E2E_EMAILS ?? "").split(",").map((e) => e.trim()).filter(Boolean);
     const notifyEmail = process.env.NOTIFY_EMAIL;
-    if (notifyEmail && !testAccounts.includes(email)) {
+    if (notifyEmail) {
       const apiKey = process.env.RESEND_API_KEY;
       if (apiKey) {
         fetch("https://api.resend.com/emails", {
@@ -406,7 +411,7 @@ export class PaymentService {
             to:      notifyEmail,
             subject: `⚠️ Reserva fallida — acción manual requerida`,
             html: `<p>No se pudo crear el evento de calendario para la reserva <strong>${stripeSessionId}</strong>.</p>
-                   <p>Email: ${email} · Slot: ${startIso}</p><p>Error: ${String(error)}</p>
+                   <p>Usuario: ${userId} · Slot: ${startIso}</p><p>Error: ${String(error)}</p>
                    <p>El alumno ha pagado. Gestiona el reembolso o crea el evento manualmente.</p>`,
           }),
         }).catch(() => {});

@@ -19,6 +19,7 @@ jest.mock("@/lib/availability-cache", () => ({
 global.fetch = jest.fn().mockResolvedValue({});
 
 import { InMemoryCreditsRepository } from "../fixtures/InMemoryCreditsRepository";
+import { InMemoryUserRepository }    from "../fixtures/InMemoryUserRepository";
 import { FakeCalendarClient }        from "../fixtures/FakeCalendarClient";
 import { InMemoryPaymentRepository } from "../fixtures/InMemoryPaymentRepository";
 import { FakeStripeClient }          from "../fixtures/FakeStripeClient";
@@ -28,17 +29,29 @@ import {
   buildTestPaymentService,
 } from "../fixtures/services";
 import { PaymentService } from "@/services/PaymentService";
+import { UserService }    from "@/services/UserService";
 
 const hoursFromNow = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
 
+function makePaymentService(overrides: {
+  creditsRepo?: InMemoryCreditsRepository;
+  calendar?:    FakeCalendarClient;
+  paymentRepo?: InMemoryPaymentRepository;
+} = {}) {
+  const creditsRepo = overrides.creditsRepo ?? new InMemoryCreditsRepository();
+  const credits     = buildTestCreditService({ credits: creditsRepo });
+  const calendar    = overrides.calendar ?? new FakeCalendarClient();
+  const stripe      = new FakeStripeClient();
+  const paymentRepo = overrides.paymentRepo ?? new InMemoryPaymentRepository();
+  const userRepo    = new InMemoryUserRepository();
+  const bookings    = buildTestBookingService({ credits, calendar });
+  const service     = new PaymentService(stripe, credits, bookings, paymentRepo, new UserService(userRepo));
+  return { service, stripe, credits, creditsRepo, calendar, paymentRepo, userRepo };
+}
+
 describe("Payment flow — pack webhook", () => {
   it("adds credits to the user after a pack payment_intent.succeeded event", async () => {
-    const creditsRepo = new InMemoryCreditsRepository();
-    const credits     = buildTestCreditService({ credits: creditsRepo });
-    const stripe      = new FakeStripeClient();
-    const paymentRepo = new InMemoryPaymentRepository();
-    const bookings    = buildTestBookingService({ credits });
-    const service     = new PaymentService(stripe, credits, bookings, paymentRepo);
+    const { service, stripe, credits } = makePaymentService();
 
     const event = stripe.buildPackPaymentEvent({
       email:    "dave@example.com",
@@ -54,12 +67,7 @@ describe("Payment flow — pack webhook", () => {
   });
 
   it("is idempotent — processing the same pack event twice adds credits only once", async () => {
-    const creditsRepo = new InMemoryCreditsRepository();
-    const credits     = buildTestCreditService({ credits: creditsRepo });
-    const stripe      = new FakeStripeClient();
-    const paymentRepo = new InMemoryPaymentRepository();
-    const bookings    = buildTestBookingService({ credits });
-    const service     = new PaymentService(stripe, credits, bookings, paymentRepo);
+    const { service, stripe, credits } = makePaymentService();
 
     const event = stripe.buildPackPaymentEvent({
       email:    "dave@example.com",
@@ -78,13 +86,7 @@ describe("Payment flow — pack webhook", () => {
 
 describe("Payment flow — single-session webhook", () => {
   it("creates a booking after a single-session payment_intent.succeeded event", async () => {
-    const creditsRepo = new InMemoryCreditsRepository();
-    const credits     = buildTestCreditService({ credits: creditsRepo });
-    const calendar    = new FakeCalendarClient();
-    const stripe      = new FakeStripeClient();
-    const paymentRepo = new InMemoryPaymentRepository();
-    const bookings    = buildTestBookingService({ credits, calendar });
-    const service     = new PaymentService(stripe, credits, bookings, paymentRepo);
+    const { service, stripe, calendar, paymentRepo } = makePaymentService();
 
     const startIso = hoursFromNow(6);
     const endIso   = hoursFromNow(7);
@@ -106,13 +108,7 @@ describe("Payment flow — single-session webhook", () => {
   });
 
   it("is idempotent — duplicate webhook does not create a second booking", async () => {
-    const creditsRepo = new InMemoryCreditsRepository();
-    const credits     = buildTestCreditService({ credits: creditsRepo });
-    const calendar    = new FakeCalendarClient();
-    const stripe      = new FakeStripeClient();
-    const paymentRepo = new InMemoryPaymentRepository();
-    const bookings    = buildTestBookingService({ credits, calendar });
-    const service     = new PaymentService(stripe, credits, bookings, paymentRepo);
+    const { service, stripe, calendar } = makePaymentService();
 
     const event = stripe.buildSingleSessionPaymentEvent({
       email:    "eve@example.com",
@@ -130,15 +126,10 @@ describe("Payment flow — single-session webhook", () => {
   });
 
   it("writes a dead-letter entry when booking creation fails after payment", async () => {
-    const creditsRepo = new InMemoryCreditsRepository();
-    const credits     = buildTestCreditService({ credits: creditsRepo });
-    const calendar    = new FakeCalendarClient();
+    const calendar = new FakeCalendarClient();
     calendar.shouldFail = true; // simulate calendar outage
 
-    const stripe      = new FakeStripeClient();
-    const paymentRepo = new InMemoryPaymentRepository();
-    const bookings    = buildTestBookingService({ credits, calendar });
-    const service     = new PaymentService(stripe, credits, bookings, paymentRepo);
+    const { service, stripe, paymentRepo, userRepo } = makePaymentService({ calendar });
 
     const event = stripe.buildSingleSessionPaymentEvent({
       email:    "frank@example.com",
@@ -154,6 +145,9 @@ describe("Payment flow — single-session webhook", () => {
     const failed = await paymentRepo.listFailedBookings();
     expect(failed).toHaveLength(1);
     expect(failed[0].stripeSessionId).toBe("pi_deadletter_001");
-    expect(failed[0].email).toBe("frank@example.com");
+
+    // userId is the ID the UserService assigned to frank@example.com
+    const frankUser = await userRepo.findByEmail("frank@example.com");
+    expect(failed[0].userId).toBe(frankUser?.id);
   });
 });

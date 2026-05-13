@@ -27,7 +27,7 @@ export class SupabasePaymentRepository implements IPaymentRepository {
   async recordFailedBooking(entry: FailedBookingEntry): Promise<void> {
     const { error } = await supabase.from("failed_bookings").upsert({
       stripe_session_id: entry.stripeSessionId,
-      email:             entry.email,
+      user_id:           entry.userId,
       start_iso:         entry.startIso,
       failed_at:         entry.failedAt,
       error:             entry.error,
@@ -38,18 +38,22 @@ export class SupabasePaymentRepository implements IPaymentRepository {
   async listFailedBookings(): Promise<FailedBookingEntry[]> {
     const { data, error } = await supabase
       .from("failed_bookings")
-      .select("*")
+      .select("stripe_session_id, user_id, start_iso, failed_at, error, users(email)")
       .order("failed_at", { ascending: false });
 
     if (error) throw error;
 
-    return (data ?? []).map(row => ({
-      stripeSessionId: row.stripe_session_id,
-      email:           row.email,
-      startIso:        row.start_iso,
-      failedAt:        row.failed_at,
-      error:           row.error,
-    }));
+    return (data ?? []).map(row => {
+      const usersJoin = row.users as { email: string } | null;
+      return {
+        stripeSessionId: row.stripe_session_id,
+        userId:          row.user_id,
+        email:           usersJoin?.email,
+        startIso:        row.start_iso,
+        failedAt:        row.failed_at,
+        error:           row.error,
+      };
+    });
   }
 
   async clearFailedBooking(stripeSessionId: string): Promise<void> {

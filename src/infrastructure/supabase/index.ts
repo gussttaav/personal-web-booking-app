@@ -6,6 +6,7 @@ import { SupabaseBookingRepository }      from "./SupabaseBookingRepository";
 import { SupabaseSessionRepository }      from "./SupabaseSessionRepository";
 import { SupabasePaymentRepository }      from "./SupabasePaymentRepository";
 import { SupabaseSubscriptionRepository } from "./SupabaseSubscriptionRepository";
+import { SupabaseUserRepository }         from "./SupabaseUserRepository";
 
 export const supabaseCreditsRepository      = new SupabaseCreditsRepository();
 export const supabaseAuditRepository        = new SupabaseAuditRepository();
@@ -13,3 +14,4 @@ export const supabaseBookingRepository      = new SupabaseBookingRepository();
 export const supabaseSessionRepository      = new SupabaseSessionRepository();
 export const supabasePaymentRepository      = new SupabasePaymentRepository();
 export const supabaseSubscriptionRepository = new SupabaseSubscriptionRepository();
+export const supabaseUserRepository         = new SupabaseUserRepository();

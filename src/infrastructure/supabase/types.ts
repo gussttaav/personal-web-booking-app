@@ -155,27 +155,35 @@ export type Database = {
       }
       failed_bookings: {
         Row: {
-          email: string
           error: string
           failed_at: string
           start_iso: string
           stripe_session_id: string
+          user_id: string
         }
         Insert: {
-          email: string
           error: string
           failed_at: string
           start_iso: string
           stripe_session_id: string
+          user_id: string
         }
         Update: {
-          email?: string
           error?: string
           failed_at?: string
           start_iso?: string
           stripe_session_id?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "failed_bookings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payments: {
         Row: {
@@ -265,6 +273,35 @@ export type Database = {
         }
         Relationships: []
       }
+      subscriptions: {
+        Row: {
+          created_at: string
+          id: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       users: {
         Row: {
           avatar_url: string | null
@@ -307,27 +344,6 @@ export type Database = {
         Update: {
           idempotency_key?: string
           processed_at?: string
-        }
-        Relationships: []
-      }
-      subscriptions: {
-        Row: {
-          id:         string
-          email:      string
-          type:       string
-          created_at: string
-        }
-        Insert: {
-          id?:         string
-          email:       string
-          type:        string
-          created_at?: string
-        }
-        Update: {
-          id?:         string
-          email?:      string
-          type?:       string
-          created_at?: string
         }
         Relationships: []
       }
@@ -385,6 +401,7 @@ export type Database = {
         Returns: boolean
       }
       decrement_credit: { Args: { p_user_id: string }; Returns: Json }
+      delete_user_by_email: { Args: { p_email: string }; Returns: undefined }
       release_slot_lock: { Args: { p_start_iso: string }; Returns: undefined }
       restore_credit: { Args: { p_user_id: string }; Returns: Json }
     }
