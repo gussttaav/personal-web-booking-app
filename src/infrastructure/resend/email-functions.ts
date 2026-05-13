@@ -29,16 +29,20 @@ function escapeHtml(str: string): string {
 
 // ─── Internal send ────────────────────────────────────────────────────────────
 
-async function send(payload: { to: string; subject: string; html: string }): Promise<void> {
-  // Skip outbound email when the recipient is a known E2E test account, so
-  // Playwright runs don't consume the Resend daily quota. Real users on the
-  // same deployment (e.g. manual smoke-tests on staging) still receive emails.
-  const testRecipients = (process.env.E2E_EMAILS ?? "")
+async function send(
+  payload: { to: string; subject: string; html: string },
+  studentEmail?: string,
+): Promise<void> {
+  // Skip when the recipient or the booking's student is a known E2E test
+  // account, so Playwright runs don't consume the Resend daily quota.
+  // Real users on the same deployment (manual smoke-tests on staging) still
+  // receive emails.
+  const testAccounts = (process.env.E2E_EMAILS ?? "")
     .split(",")
     .map((e) => e.trim())
     .filter(Boolean);
-  if (testRecipients.includes(payload.to)) {
-    console.info(`[email] test recipient — skipped send to ${payload.to}`);
+  if (testAccounts.includes(payload.to) || (studentEmail && testAccounts.includes(studentEmail))) {
+    console.info(`[email] test booking — skipped send to ${payload.to}`);
     return;
   }
 
@@ -277,7 +281,7 @@ export async function sendCancellationNotificationEmail(params: {
         <p>Gestiona el reembolso manualmente si procede.</p>
       </div></div></body></html>
     `,
-  });
+  }, params.studentEmail);
 }
 
 // ─── New booking notification (Gustavo) ───────────────────────────────────────
@@ -321,5 +325,5 @@ export async function sendNewBookingNotificationEmail(params: {
         </div>
       </div></div></body></html>
     `,
-  });
+  }, params.studentEmail);
 }
