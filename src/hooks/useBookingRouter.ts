@@ -17,6 +17,7 @@
  *   Session click  → callbackUrl = /?intent=<sessionType>
  *   Pack buy       → callbackUrl = /?intent=buy-pack&packSize=<size>
  *   Pack schedule  → callbackUrl = /?action=schedule-pack
+ *   Smart book     → callbackUrl = /?intent=smart-book[&slot…]
  *
  * After OAuth, Next.js renders the page with those params in the URL.
  * The hook reads them in a useEffect that is GATED ON isSignedIn === true,
@@ -28,6 +29,10 @@
  *
  * A ref (intentConsumed) ensures params are only consumed once per page
  * load even if React re-renders or StrictMode double-invokes the effect.
+ *
+ * For the smart-book intent the consumer additionally waits for hasBookings
+ * to settle (transition from null → boolean) so the routing decision has
+ * both pack-credits and booking-history data available.
  */
 
 import { useState, useEffect, useRef } from "react";
@@ -57,6 +62,17 @@ export interface BookingRouterState {
   closePackBooking:      () => void;
   closeSession:          () => void;
 
+  /**
+   * Smart-routing CTA used by the landing-page hero buttons. Picks the right
+   * booking surface based on the user's state:
+   *
+   *   - Signed-out          → SignInGate (with intent=smart-book + optional slot)
+   *   - Active pack credits → pack booking flow
+   *   - No prior bookings   → free 15-min flow
+   *   - Has prior bookings  → paid 1h session flow
+   */
+  handleSmartBook: (opts?: { slot?: SelectedSlot }) => void;
+
   // ── Reschedule wiring ─────────────────────────────────────────────────────
   applyReschedule:          (type: string, token: string | null) => void;
   setRescheduleSignInLabel: (label: string) => void;
@@ -78,10 +94,20 @@ const SESSION_SIGNIN_LABELS: Record<SingleSessionType, string> = {
 const VALID_SESSION_TYPES = new Set<string>(["free15min", "session1h", "session2h"]);
 const VALID_PACK_SIZES    = new Set<number>([5, 10]);
 
+function encodeSlotParams(params: URLSearchParams, slot: SelectedSlot) {
+  params.set("slotStart",     slot.startIso);
+  params.set("slotEnd",       slot.endIso);
+  params.set("slotLabel",     slot.label);
+  params.set("slotDateLabel", slot.dateLabel);
+  if (slot.timezone) params.set("slotTz", slot.timezone);
+}
+
 export function useBookingRouter(
   isSignedIn: boolean,
   /** Current pack credits — used to route the buy-pack post-login intent */
   packCredits: number,
+  /** Whether the user has ever booked. null = still loading. Required for smart-book routing. */
+  hasBookings: boolean | null,
 ): BookingRouterState {
   const [activeSession,     setActiveSession]     = useState<SingleSessionType | null>(null);
   const [showPackBooking,   setShowPackBooking]   = useState(false);
@@ -94,25 +120,44 @@ export function useBookingRouter(
 
   // Prevents double-consuming intent params if the effect fires more than once
   const intentConsumed = useRef(false);
+  // For the smart-book intent we may need to wait for hasBookings to settle;
+  // this ref preserves the parsed slot between effect runs.
+  const pendingSmartBook = useRef<{ slot: SelectedSlot | null } | null>(null);
 
   // ── Read URL intent params once the user is confirmed signed-in ───────────
   //
-  // Depends on [isSignedIn] so it re-runs when NextAuth resolves the session.
-  // On the initial render after an OAuth redirect isSignedIn is false;
-  // when it flips to true the ?intent / ?action params are still in the URL.
+  // Depends on [isSignedIn, hasBookings] so it re-runs when NextAuth resolves
+  // the session AND when the booking-history flag settles (required by the
+  // smart-book branch). On the initial render after an OAuth redirect
+  // isSignedIn is false; when it flips to true the ?intent / ?action params
+  // are still in the URL.
   useEffect(() => {
-    if (!isSignedIn || intentConsumed.current) return;
+    if (!isSignedIn) return;
 
-    const url          = new URL(window.location.href);
-    const intent       = url.searchParams.get("intent");
-    const action       = url.searchParams.get("action");
-    const sizeStr      = url.searchParams.get("packSize");
+    // Resume a previously-parked smart-book intent once hasBookings resolves.
+    // Only used by the OAuth-restore path; the in-page smart-book caller
+    // already has the slot wired through InteractiveShell's pendingSlot.
+    if (pendingSmartBook.current) {
+      if (hasBookings === null) return;
+      const { slot } = pendingSmartBook.current;
+      pendingSmartBook.current = null;
+      if (slot) setRestoredSlot(slot);
+      routeSmartBookSignedIn();
+      return;
+    }
+
+    if (intentConsumed.current) return;
+
+    const url           = new URL(window.location.href);
+    const intent        = url.searchParams.get("intent");
+    const action        = url.searchParams.get("action");
+    const sizeStr       = url.searchParams.get("packSize");
     // Slot params encoded by the AvailabilityModal unauthenticated flow
-    const slotStart    = url.searchParams.get("slotStart");
-    const slotEnd      = url.searchParams.get("slotEnd");
-    const slotLabel    = url.searchParams.get("slotLabel");
+    const slotStart     = url.searchParams.get("slotStart");
+    const slotEnd       = url.searchParams.get("slotEnd");
+    const slotLabel     = url.searchParams.get("slotLabel");
     const slotDateLabel = url.searchParams.get("slotDateLabel");
-    const slotTz       = url.searchParams.get("slotTz");
+    const slotTz        = url.searchParams.get("slotTz");
 
     if (!intent && !action) return; // no intent params — nothing to do
 
@@ -128,16 +173,32 @@ export function useBookingRouter(
     url.searchParams.delete("slotTz");
     window.history.replaceState({}, "", url.toString());
 
-    // Restore the pre-selected slot so InteractiveShell can wire it as pendingSlot
-    if (slotStart && slotEnd && slotLabel && slotDateLabel) {
-      setRestoredSlot({
-        startIso:  slotStart,
-        endIso:    slotEnd,
-        label:     slotLabel,
-        dateLabel: slotDateLabel,
-        timezone:  slotTz ?? undefined,
-      });
+    const parsedSlot: SelectedSlot | null =
+      slotStart && slotEnd && slotLabel && slotDateLabel
+        ? {
+            startIso:  slotStart,
+            endIso:    slotEnd,
+            label:     slotLabel,
+            dateLabel: slotDateLabel,
+            timezone:  slotTz ?? undefined,
+          }
+        : null;
+
+    // intent=smart-book — landing CTA after OAuth.
+    // Defer routing until hasBookings has resolved, because the choice
+    // between free15min and session1h depends on it.
+    if (intent === "smart-book") {
+      if (hasBookings === null) {
+        pendingSmartBook.current = { slot: parsedSlot };
+        return;
+      }
+      if (parsedSlot) setRestoredSlot(parsedSlot);
+      routeSmartBookSignedIn();
+      return;
     }
+
+    // Restore the pre-selected slot so InteractiveShell can wire it as pendingSlot
+    if (parsedSlot) setRestoredSlot(parsedSlot);
 
     // action=schedule-pack — from pago-exitoso after a pack purchase
     if (action === "schedule-pack") {
@@ -164,7 +225,7 @@ export function useBookingRouter(
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSignedIn]); // packCredits intentionally omitted — only needed at the moment of consumption
+  }, [isSignedIn, hasBookings]); // packCredits intentionally omitted — only needed at the moment of consumption
 
   // ── Auto-open after in-page sign-in (SignInGate overlay, no page reload) ──
   useEffect(() => {
@@ -205,6 +266,41 @@ export function useBookingRouter(
       return;
     }
     setShowPackBooking(true);
+  }
+
+  /**
+   * Internal: open the booking view that matches the current user state.
+   * Caller is responsible for ensuring the user is signed in and hasBookings
+   * has resolved before invoking.
+   */
+  function routeSmartBookSignedIn() {
+    if (packCredits > 0) {
+      setShowPackBooking(true);
+      return;
+    }
+    setActiveSession(hasBookings ? "session1h" : "free15min");
+  }
+
+  function handleSmartBook(opts?: { slot?: SelectedSlot }) {
+    const slot = opts?.slot;
+
+    if (!isSignedIn) {
+      const params = new URLSearchParams({ intent: "smart-book" });
+      if (slot) encodeSlotParams(params, slot);
+      setSignInGateLabel(slot ? "reservar la hora elegida" : "reservar una sesión");
+      setSignInCallbackUrl(`/?${params.toString()}`);
+      return;
+    }
+
+    // Signed in but booking history still loading — park and resume in the
+    // intent-consumer effect once hasBookings settles. Slot threading for
+    // the in-page path is handled by InteractiveShell's pendingSlot state.
+    if (hasBookings === null) {
+      pendingSmartBook.current = { slot: null };
+      return;
+    }
+
+    routeSmartBookSignedIn();
   }
 
   function handleSignInGateClose() {
@@ -262,6 +358,7 @@ export function useBookingRouter(
     handleCreditsReady,
     closePackBooking,
     closeSession,
+    handleSmartBook,
     applyReschedule,
     setRescheduleSignInLabel,
     showSignInGate,

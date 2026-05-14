@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
+import { userService } from "@/services";
 
 // Extend NextAuth types so session.user.isAdmin is available client-side.
 declare module "next-auth" {
@@ -25,6 +26,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
 
   callbacks: {
+    // Register/update the user record in the database on every Google sign-in.
+    async signIn({ user }) {
+      if (user.email) {
+        await userService.ensureUser(
+          user.email,
+          user.name  ?? undefined,
+          user.image ?? undefined,
+        );
+      }
+      return true;
+    },
+
     // Persist the Google account's email/name into the JWT
     async jwt({ token, profile }) {
       if (profile) {

@@ -46,6 +46,14 @@ export interface IBookingRepository {
   listByUser(email: string): Promise<{ cancelToken: string; joinToken: string; record: BookingRecord }[]>;
 
   /**
+   * Returns true if the user has ever created a booking, regardless of whether
+   * it was later cancelled. Used to gate first-time-user flows (e.g. free
+   * trial eligibility) — once a user has booked, cancelling does not restore
+   * eligibility.
+   */
+  hasAnyBooking(email: string): Promise<boolean>;
+
+  /**
    * Persists a failed reschedule attempt to the dead-letter store so it can be
    * recovered or investigated manually. Best-effort — callers should not throw
    * on failure here.

@@ -5,6 +5,7 @@ import { BookingService }       from "./BookingService";
 import { PaymentService }       from "./PaymentService";
 import { ChatService }          from "./ChatService";
 import { SubscriptionService }  from "./SubscriptionService";
+import { UserService }          from "./UserService";
 import {
   supabaseCreditsRepository,
   supabaseAuditRepository,
@@ -12,6 +13,7 @@ import {
   supabaseSessionRepository,
   supabasePaymentRepository,
   supabaseSubscriptionRepository,
+  supabaseUserRepository,
 } from "@/infrastructure/supabase";
 import { ZoomClient }      from "@/infrastructure/zoom";
 import { CalendarClient }  from "@/infrastructure/google";
@@ -19,6 +21,8 @@ import { SchedulerClient } from "@/infrastructure/qstash";
 import { EmailClient }     from "@/infrastructure/resend";
 import { StripeClient }    from "@/infrastructure/stripe/StripeClient";
 import { GeminiClient }    from "@/infrastructure/gemini";
+
+export const userService = new UserService(supabaseUserRepository);
 
 export const creditService = new CreditService(supabaseCreditsRepository, supabaseAuditRepository);
 
@@ -40,8 +44,9 @@ export const paymentService = new PaymentService(
   creditService,
   bookingService,
   supabasePaymentRepository,
+  userService,
 );
 
 export const chatService = new ChatService(new GeminiClient());
 
-export const subscriptionService = new SubscriptionService(supabaseSubscriptionRepository);
+export const subscriptionService = new SubscriptionService(supabaseSubscriptionRepository, userService);

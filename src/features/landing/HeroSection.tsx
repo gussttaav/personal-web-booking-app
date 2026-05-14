@@ -411,7 +411,7 @@ export default function HeroSection() {
         >
           <button
             type="button"
-            onClick={() => window.dispatchEvent(new CustomEvent("open-session-picker-modal"))}
+            onClick={() => window.dispatchEvent(new CustomEvent("open-smart-book"))}
             style={{
               display: "inline-flex",
               alignItems: "center",

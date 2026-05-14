@@ -22,8 +22,7 @@ import PackModal from "@/components/PackModal";
 import BookingModeViewComponent from "@/components/BookingModeView";
 import SignInGate from "@/components/SignInGate";
 import SingleSessionBooking from "@/components/SingleSessionBooking";
-import AvailabilityModal, { type SessionChoice } from "@/components/AvailabilityModal";
-import SessionPickerModal from "@/components/SessionPickerModal";
+import AvailabilityModal from "@/components/AvailabilityModal";
 import Chat from "@/components/Chat";
 import { PACK_SIZES, PACK_CONFIG } from "@/constants";
 import SessionCard from "./SessionCard";
@@ -66,14 +65,13 @@ function PackCardSkeleton() {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function InteractiveShell() {
-  const { googleUser, isSignedIn, isAuthLoading, packSession, creditsLoading, updateCredits } =
+  const { googleUser, isSignedIn, isAuthLoading, packSession, creditsLoading, updateCredits, hasBookings } =
     useUserSession();
 
-  const router     = useBookingRouter(isSignedIn, packSession?.credits ?? 0);
+  const router     = useBookingRouter(isSignedIn, packSession?.credits ?? 0, hasBookings);
   const reschedule = useRescheduleIntent(isSignedIn);
 
   const [showAvailabilityModal,  setShowAvailabilityModal]  = useState(false);
-  const [showSessionPickerModal, setShowSessionPickerModal] = useState(false);
   const [pendingSlot,            setPendingSlot]            = useState<SelectedSlot | null>(null);
   const [packClientSecret,       setPackClientSecret]       = useState<string | null>(null);
   const [packCheckoutLoading,    setPackCheckoutLoading]    = useState<PackSize | null>(null);
@@ -124,12 +122,13 @@ export default function InteractiveShell() {
     return () => window.removeEventListener("open-availability-modal", handler);
   }, []);
 
-  // Open the session picker modal ("Reservar sesión ahora" CTA)
+  // "Reservar sesión ahora" CTA — smart-routes to the right surface based on
+  // auth + active pack + booking history.
   useEffect(() => {
-    const handler = () => setShowSessionPickerModal(true);
-    window.addEventListener("open-session-picker-modal", handler);
-    return () => window.removeEventListener("open-session-picker-modal", handler);
-  }, []);
+    const handler = () => router.handleSmartBook();
+    window.addEventListener("open-smart-book", handler);
+    return () => window.removeEventListener("open-smart-book", handler);
+  }, [router.handleSmartBook]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Direct shortcut to the free 15-min booking (e.g. from SpecializationsSection)
   useEffect(() => {
@@ -180,77 +179,16 @@ export default function InteractiveShell() {
     router.handlePackSchedule();
   }, [creditsLoading, packSession?.credits, router.selectedPack, router.restoredSlot]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Handle session type selected in SessionPickerModal (no pre-selected slot)
-  function handleSessionPickerSelected(choice: SessionChoice) {
-    setShowSessionPickerModal(false);
-    if (choice.kind === "session") {
-      router.handleSessionClick(choice.type);
-    } else {
-      if (isSignedIn && (packSession?.credits ?? 0) > 0) {
-        router.handlePackSchedule();
-      } else {
-        router.handlePackBuy(choice.size);
-      }
-    }
-  }
-
-  // Handle slot + session type selected in AvailabilityModal
-  function handleAvailabilitySessionSelected(choice: SessionChoice, slot: SelectedSlot) {
+  // Handle a slot selected in AvailabilityModal — smart-routes to the right
+  // surface (free trial / paid 1h / pack) based on user state, with the slot
+  // threaded through pendingSlot for in-page flows and via callbackUrl for
+  // the OAuth-restore flow.
+  function handleAvailabilitySlotSelected(slot: SelectedSlot) {
     setShowAvailabilityModal(false);
-
-    if (choice.kind === "session") {
-      if (isSignedIn && googleUser?.email) {
-        // All session types: pass the slot so WeeklyCalendar can pre-focus it.
-        // For 1h the slot goes to review phase directly; for 15min/2h the
-        // calendar opens at the right week with the slot already focused.
-        setPendingSlot(slot);
-        router.handleSessionClick(choice.type);
-      } else {
-        // Unauthenticated → encode slot in callbackUrl so it survives OAuth
-        const params = new URLSearchParams({ intent: choice.type });
-        params.set("slotStart",    slot.startIso);
-        params.set("slotEnd",      slot.endIso);
-        params.set("slotLabel",    slot.label);
-        params.set("slotDateLabel", slot.dateLabel);
-        if (slot.timezone) params.set("slotTz", slot.timezone);
-        const signInLabels: Record<string, string> = {
-          free15min: "reservar el encuentro inicial gratuito",
-          session1h: "reservar una sesión de 1 hora",
-          session2h: "reservar una sesión de 2 horas",
-        };
-        router.showSignInGate(
-          signInLabels[choice.type] ?? "reservar una sesión",
-          `/?${params.toString()}`,
-        );
-      }
-    } else {
-      // Pack choice
-      if (isSignedIn && googleUser?.email) {
-        if ((packSession?.credits ?? 0) > 0) {
-          setPendingSlot(slot); // pre-select 1h slot in BookingModeView
-          router.handlePackSchedule();
-        } else {
-          router.handlePackBuy(choice.size); // opens PackModal
-        }
-      } else {
-        // Unauthenticated → encode slot in callbackUrl alongside buy-pack intent.
-        // After OAuth the user may have credits already (prior purchase), in which
-        // case useBookingRouter routes to schedule-pack and the slot is restored.
-        const params = new URLSearchParams({
-          intent:   "buy-pack",
-          packSize: String(choice.size),
-        });
-        params.set("slotStart",    slot.startIso);
-        params.set("slotEnd",      slot.endIso);
-        params.set("slotLabel",    slot.label);
-        params.set("slotDateLabel", slot.dateLabel);
-        if (slot.timezone) params.set("slotTz", slot.timezone);
-        router.showSignInGate(
-          "comprar un pack de clases",
-          `/?${params.toString()}`,
-        );
-      }
+    if (isSignedIn && googleUser?.email) {
+      setPendingSlot(slot);
     }
+    router.handleSmartBook({ slot });
   }
 
   const packStudentInfo = packSession
@@ -373,25 +311,10 @@ export default function InteractiveShell() {
         @keyframes skeletonPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
       `}</style>
 
-      {showSessionPickerModal && (
-        <SessionPickerModal
-          onClose={() => setShowSessionPickerModal(false)}
-          onSessionSelected={handleSessionPickerSelected}
-          isSignedIn={isSignedIn}
-          activePackSize={
-            packSession && (packSession.credits ?? 0) > 0 ? packSession.packSize : null
-          }
-        />
-      )}
-
       {showAvailabilityModal && (
         <AvailabilityModal
           onClose={() => setShowAvailabilityModal(false)}
-          onSessionSelected={handleAvailabilitySessionSelected}
-          isSignedIn={isSignedIn}
-          activePackSize={
-            packSession && (packSession.credits ?? 0) > 0 ? packSession.packSize : null
-          }
+          onSlotSelected={handleAvailabilitySlotSelected}
         />
       )}
 

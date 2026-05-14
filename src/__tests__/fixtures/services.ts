@@ -1,26 +1,31 @@
 // TEST-01: Fixture builders for integration tests.
 // Creates service instances wired with in-memory repositories and fake clients
 // so tests exercise real business logic without hitting external systems.
-import { CreditService } from "@/services/CreditService";
-import { BookingService } from "@/services/BookingService";
-import { PaymentService } from "@/services/PaymentService";
-import { SessionService } from "@/services/SessionService";
-import type { ICreditsRepository } from "@/domain/repositories/ICreditsRepository";
-import type { IAuditRepository } from "@/domain/repositories/IAuditRepository";
-import type { IBookingRepository } from "@/domain/repositories/IBookingRepository";
-import type { ISessionRepository } from "@/domain/repositories/ISessionRepository";
-import type { IPaymentRepository } from "@/domain/repositories/IPaymentRepository";
+import { CreditService }       from "@/services/CreditService";
+import { BookingService }      from "@/services/BookingService";
+import { PaymentService }      from "@/services/PaymentService";
+import { SessionService }      from "@/services/SessionService";
+import { SubscriptionService } from "@/services/SubscriptionService";
+import { UserService }         from "@/services/UserService";
+import type { ICreditsRepository }      from "@/domain/repositories/ICreditsRepository";
+import type { IAuditRepository }        from "@/domain/repositories/IAuditRepository";
+import type { IBookingRepository }      from "@/domain/repositories/IBookingRepository";
+import type { ISessionRepository }      from "@/domain/repositories/ISessionRepository";
+import type { IPaymentRepository }      from "@/domain/repositories/IPaymentRepository";
+import type { ISubscriptionRepository } from "@/domain/repositories/ISubscriptionRepository";
+import type { IUserRepository }         from "@/domain/repositories/IUserRepository";
 import type { ICalendarClient } from "@/infrastructure/google/ICalendarClient";
-import type { IZoomClient } from "@/infrastructure/zoom/ZoomClient";
-import type { IScheduler } from "@/infrastructure/qstash/IScheduler";
-import type { IEmailClient } from "@/infrastructure/resend/IEmailClient";
-import type { IStripeClient } from "@/infrastructure/stripe/StripeClient";
+import type { IZoomClient }     from "@/infrastructure/zoom/ZoomClient";
+import type { IScheduler }      from "@/infrastructure/qstash/IScheduler";
+import type { IEmailClient }    from "@/infrastructure/resend/IEmailClient";
+import type { IStripeClient }   from "@/infrastructure/stripe/StripeClient";
 
-import { InMemoryCreditsRepository } from "./InMemoryCreditsRepository";
-import { InMemoryAuditRepository }   from "./InMemoryAuditRepository";
-import { InMemoryBookingRepository } from "./InMemoryBookingRepository";
-import { InMemorySessionRepository } from "./InMemorySessionRepository";
-import { InMemoryPaymentRepository } from "./InMemoryPaymentRepository";
+import { InMemoryCreditsRepository }      from "./InMemoryCreditsRepository";
+import { InMemoryAuditRepository }        from "./InMemoryAuditRepository";
+import { InMemoryBookingRepository }      from "./InMemoryBookingRepository";
+import { InMemorySessionRepository }      from "./InMemorySessionRepository";
+import { InMemoryPaymentRepository }      from "./InMemoryPaymentRepository";
+import { InMemoryUserRepository }         from "./InMemoryUserRepository";
 import { FakeCalendarClient } from "./FakeCalendarClient";
 import { FakeZoomClient }     from "./FakeZoomClient";
 import { FakeEmailClient }    from "./FakeEmailClient";
@@ -76,6 +81,7 @@ export interface PaymentServiceDeps {
   credits:     CreditService;
   bookings:    BookingService;
   paymentRepo: IPaymentRepository;
+  userRepo:    IUserRepository;
 }
 
 export function buildTestPaymentService(
@@ -87,6 +93,7 @@ export function buildTestPaymentService(
   const paymentRepo = overrides.paymentRepo instanceof InMemoryPaymentRepository
     ? overrides.paymentRepo
     : new InMemoryPaymentRepository();
+  const userRepo    = overrides.userRepo ?? new InMemoryUserRepository();
 
   const bookings = overrides.bookings ?? buildTestBookingService({
     credits,
@@ -98,9 +105,32 @@ export function buildTestPaymentService(
     credits,
     bookings,
     overrides.paymentRepo ?? paymentRepo,
+    new UserService(userRepo),
   );
 
   return { service, stripe, credits, calendar, paymentRepo };
+}
+
+// ─── SubscriptionService builder ─────────────────────────────────────────────
+
+export interface SubscriptionServiceDeps {
+  subs:     ISubscriptionRepository;
+  userRepo: IUserRepository;
+}
+
+export function buildTestSubscriptionService(
+  overrides: Partial<SubscriptionServiceDeps> = {},
+): { service: SubscriptionService; userRepo: InMemoryUserRepository } {
+  const userRepo = (overrides.userRepo as InMemoryUserRepository) ?? new InMemoryUserRepository();
+
+  // Minimal in-memory subscription repo if none provided
+  const subs: ISubscriptionRepository = overrides.subs ?? {
+    async subscribe() {},
+    async isSubscribed() { return false; },
+  };
+
+  const service = new SubscriptionService(subs, new UserService(userRepo));
+  return { service, userRepo };
 }
 
 // ─── SessionService builder ───────────────────────────────────────────────────

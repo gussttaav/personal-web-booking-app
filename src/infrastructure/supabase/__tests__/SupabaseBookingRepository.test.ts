@@ -95,6 +95,32 @@ describeDb("SupabaseBookingRepository", () => {
     await cleanup(record.email);
   });
 
+  it("hasAnyBooking returns false for unknown user", async () => {
+    const result = await repo.hasAnyBooking(`no-one-${Date.now()}@example.com`);
+    expect(result).toBe(false);
+  });
+
+  it("hasAnyBooking returns true after a booking is created", async () => {
+    const record = baseRecord();
+    await repo.createBooking(record);
+
+    const result = await repo.hasAnyBooking(record.email);
+    expect(result).toBe(true);
+
+    await cleanup(record.email);
+  });
+
+  it("hasAnyBooking still returns true after the only booking is cancelled", async () => {
+    const record = baseRecord();
+    const { cancelToken } = await repo.createBooking(record);
+    await repo.consumeCancelToken(cancelToken);
+
+    const result = await repo.hasAnyBooking(record.email);
+    expect(result).toBe(true);
+
+    await cleanup(record.email);
+  });
+
   it("acquireSlotLock returns true then false for same slot", async () => {
     const startIso = new Date(Date.now() + 999_999_000).toISOString();
     const first  = await repo.acquireSlotLock(startIso, 60);
