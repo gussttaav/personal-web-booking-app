@@ -30,6 +30,9 @@ export function useUserSession() {
   const { data: googleSession, status } = useSession();
   const [packSession,    setPackSession]    = useState<UserSession | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
+  // null = unknown (still loading or signed-out), boolean = resolved.
+  // Consumers that gate on "first-time user" must wait for a non-null value.
+  const [hasBookings,    setHasBookings]    = useState<boolean | null>(null);
 
   // Track the email we last fetched for — prevents duplicate fetches
   // caused by NextAuth returning a new session object reference on every
@@ -52,6 +55,7 @@ export function useUserSession() {
         } else {
           setPackSession(null);
         }
+        setHasBookings(data.hasBookings);
       } catch {
         // Silently fail — user stays in browse mode without pack
         setPackSession(null);
@@ -87,6 +91,7 @@ export function useUserSession() {
       fetchedForEmail.current = null;
       lastVisibilityFetch.current = 0;
       setPackSession(null);
+      setHasBookings(null);
     }
   }, [status]);
 
@@ -146,5 +151,9 @@ export function useUserSession() {
     creditsLoading,
     updateCredits,
     clearPackSession,
+
+    // Whether the user has ever booked a class (including cancelled bookings).
+    // null while loading / signed-out.
+    hasBookings,
   };
 }

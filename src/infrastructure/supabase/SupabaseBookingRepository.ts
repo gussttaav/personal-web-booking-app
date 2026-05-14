@@ -184,6 +184,27 @@ export class SupabaseBookingRepository implements IBookingRepository {
     return results;
   }
 
+  async hasAnyBooking(email: string): Promise<boolean> {
+    const normalized = email.toLowerCase().trim();
+
+    const { data: user } = await supabase
+      .from("users")
+      .select("id")
+      .eq("email", normalized)
+      .maybeSingle();
+
+    if (!user) return false;
+
+    const { count, error } = await supabase
+      .from("bookings")
+      .select("id", { head: true, count: "exact" })
+      .eq("user_id", user.id)
+      .limit(1);
+
+    if (error) throw error;
+    return (count ?? 0) > 0;
+  }
+
   async recordRescheduleFailure(data: {
     email:       string;
     startIso:    string;

@@ -53,6 +53,14 @@ export class InMemoryBookingRepository implements IBookingRepository {
     return result;
   }
 
+  async hasAnyBooking(email: string): Promise<boolean> {
+    const target = email.toLowerCase();
+    for (const record of this.bookings.values()) {
+      if (record.email.toLowerCase() === target) return true;
+    }
+    return false;
+  }
+
   async recordRescheduleFailure(data: {
     email:       string;
     startIso:    string;

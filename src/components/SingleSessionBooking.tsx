@@ -60,10 +60,35 @@ export default function SingleSessionBooking({
   const router = useRouter();
   const cfg = SESSION_CONFIGS[sessionType];
 
-  // 1h: start in "review" phase with the slot pre-filled (exact match).
-  // 15min/2h: start in "picking" phase but pre-focus the slot in the calendar
-  //           so it appears as if the user already clicked it.
-  const supportsPreSelect = !!initialSlot;
+  // 1h: start in "review" phase with the slot pre-filled (exact duration match
+  //      against AvailabilityModal's 1h slots).
+  // 15min: truncate the 1h slot to its first 15 minutes and jump to review.
+  //      The server validates duration, so we must adjust endIso + label here.
+  // 2h: start in "picking" phase but pre-focus the slot's week in the calendar
+  //      so the user picks the matching 2h sub-slot. We cannot synthesise a 2h
+  //      slot from a 1h hint.
+  const preSelectedSlot: SelectedSlot | null = (() => {
+    if (!initialSlot) return null;
+    if (sessionType === "session1h") return initialSlot;
+    if (sessionType === "free15min") {
+      const start = new Date(initialSlot.startIso);
+      const end   = new Date(start.getTime() + 15 * 60_000);
+      const pad   = (n: number) => String(n).padStart(2, "0");
+      const fmt   = (d: Date) =>
+        initialSlot.timezone
+          ? d.toLocaleTimeString("es-ES", { timeZone: initialSlot.timezone, hour: "2-digit", minute: "2-digit", hour12: false })
+          : `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      return {
+        startIso:  initialSlot.startIso,
+        endIso:    end.toISOString(),
+        label:     `${fmt(start)}–${fmt(end)}`,
+        dateLabel: initialSlot.dateLabel,
+        timezone:  initialSlot.timezone,
+      };
+    }
+    return null;
+  })();
+  const supportsPreSelect = !!preSelectedSlot;
 
   // Initial week offset — navigate the calendar to the week containing the
   // pre-selected slot so the user sees it immediately.
@@ -83,7 +108,7 @@ export default function SingleSessionBooking({
 
   const [phase,          setPhase]          = useState<Phase>(supportsPreSelect ? "review" : "picking");
   const [errorMsg,       setErrorMsg]       = useState("");
-  const [selected,       setSelected]       = useState<SelectedSlot | null>(supportsPreSelect ? initialSlot! : null);
+  const [selected,       setSelected]       = useState<SelectedSlot | null>(preSelectedSlot);
   const [focusedSlot,    setFocusedSlot]    = useState<SelectedSlot | null>(null);
   const [note,           setNote]           = useState("");
   const [sessionUrl,     setSessionUrl]     = useState("");
@@ -294,9 +319,11 @@ export default function SingleSessionBooking({
                   </svg>
                 </div>
                 <div>
-                  <p className="text-sm mb-1" style={{ color: "#bbcabf" }}>Fecha y Hora Seleccionada</p>
                   <p className="text-xl font-extrabold font-headline tracking-tight" style={{ color: "#e5e1e4" }}>
-                    {selected.dateLabel} — {selected.label.split(/\s*[–\-]\s*/)[0]}
+                    {selected.dateLabel}
+                  </p>
+                  <p className="font-headline tracking-tight" style={{ color: "#4edea3", fontSize: 15, marginTop: 2 }}>
+                    {selected.label}
                   </p>
                 </div>
               </div>

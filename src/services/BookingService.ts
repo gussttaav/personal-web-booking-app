@@ -342,6 +342,10 @@ export class BookingService {
     }));
   }
 
+  async hasAnyBooking(email: string): Promise<boolean> {
+    return this.bookings.hasAnyBooking(email);
+  }
+
   async getJoinInfo(token: string): Promise<{ eventId: string; email: string; name: string; sessionType: string; startsAt: string } | null> {
     return this.bookings.findByJoinToken(token);
   }

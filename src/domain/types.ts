@@ -79,9 +79,10 @@ export interface BookResponse {
 }
 
 export interface CreditsResponse {
-  credits:  number;
-  name:     string;
-  packSize: PackSize | null;
+  credits:     number;
+  name:        string;
+  packSize:    PackSize | null;
+  hasBookings: boolean;
 }
 
 export interface CheckoutResponse {
