@@ -5,7 +5,7 @@ export class SupabaseUserRepository implements IUserRepository {
   async upsert(email: string, name?: string, avatarUrl?: string): Promise<string> {
     const normalized = email.toLowerCase().trim();
 
-    const payload: Record<string, string> = { email: normalized };
+    const payload: { email: string; name?: string; avatar_url?: string } = { email: normalized };
     if (name)      payload.name       = name;
     if (avatarUrl) payload.avatar_url = avatarUrl;
 
