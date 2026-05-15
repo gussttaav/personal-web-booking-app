@@ -297,6 +297,10 @@ export default function ZoomRoomInner({
   const [isSharingScreen, setIsSharingScreen]   = useState(false);
   const [isReceivingShare, setIsReceivingShare] = useState(false);
   const [isVideosPanelHidden, setIsVideosPanelHidden] = useState(false);
+  // Mobile-only screen-share focus. "screen" → share fills the viewport with a
+  // small remote PiP; "faces" → camera panels fill, share shrinks to the PiP.
+  // Toggled by tapping. Desktop ignores this (uses the side focus-tab instead).
+  const [mobileShareFocus, setMobileShareFocus] = useState<"screen" | "faces">("screen");
   const [remoteCamOffIds, setRemoteCamOffIds]   = useState<number[]>([]);
   const [remoteMutedIds,  setRemoteMutedIds]    = useState<number[]>([]);
   // Reactive copies of clientRef and selfUserIdRef so useZoomConnectionQuality
@@ -826,7 +830,10 @@ export default function ZoomRoomInner({
   // Ensures re-entering share mode always starts with the video column visible
   // and never leaves the non-share grid in a `hidden` state.
   useEffect(() => {
-    if (!isSharingScreen && !isReceivingShare) setIsVideosPanelHidden(false);
+    if (!isSharingScreen && !isReceivingShare) {
+      setIsVideosPanelHidden(false);
+      setMobileShareFocus("screen");
+    }
   }, [isSharingScreen, isReceivingShare]);
 
   // ── Video cover-fill ──────────────────────────────────────────────────────
@@ -969,13 +976,13 @@ export default function ZoomRoomInner({
 
         {/* ── Header ── */}
         <header className="shrink-0 bg-[#131315]/80 backdrop-blur-md border-b border-white/5 shadow-xl flex justify-between items-center w-full px-4 md:px-8 h-16">
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 md:gap-6">
             <span
               className="flex items-center gap-2 text-xl font-black tracking-tighter"
               style={{ fontFamily: "var(--font-headline, Manrope), sans-serif", color: "#e5e1e4" }}
             >
               <BrandLogo size={20} />
-              <span>GUSTAVO<span style={{ color: "#4edea3" }}>AI.DEV</span></span>
+              <span className="hidden md:inline">GUSTAVO<span style={{ color: "#4edea3" }}>AI.DEV</span></span>
             </span>
             <div className="h-4 w-[1px] bg-outline-variant/30 hidden md:block" />
             <div
@@ -987,7 +994,7 @@ export default function ZoomRoomInner({
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 mr-4 hidden md:flex">
+            <div className="flex items-center gap-2 mr-0 md:mr-4">
               <button
                 onClick={() => setIsSettingsOpen(true)}
                 className="p-2 text-[#e5e1e4]/60 hover:text-[#4edea3] transition-colors cursor-pointer active:opacity-80"
@@ -1011,15 +1018,44 @@ export default function ZoomRoomInner({
           {/* Content area — switches between 2-col grid (normal) and 75/25 flex row (sharing) */}
           <div className={`flex-1 min-h-0 py-4 px-4 md:px-0 ${
             isSharingScreen || isReceivingShare
-              ? "flex flex-row gap-4 overflow-visible"
-              : "grid grid-cols-1 md:grid-cols-2 gap-6 overflow-hidden overflow-y-auto md:overflow-hidden"
+              ? "relative overflow-hidden md:flex md:flex-row md:gap-4 md:overflow-visible"
+              : "flex flex-col gap-3 overflow-hidden md:grid md:grid-cols-2 md:gap-6 md:overflow-hidden"
           }`}>
 
-            {/* ── Screen share panel — both elements always in DOM so refs are valid ── */}
-            <div className={(isSharingScreen || isReceivingShare)
-              ? "flex-[3] relative rounded-2xl bg-black border border-white/5"
-              : "hidden"
+            {/* ── Screen share panel — both elements always in DOM so refs are valid ──
+                Mobile: focus="screen" → fills the viewport; focus="faces" → shrinks
+                to a corner PiP. Desktop (md:) always restores the original
+                flex-[3] row column regardless of mobileShareFocus. */}
+            <div className={
+              !(isSharingScreen || isReceivingShare)
+                ? "hidden"
+                : [
+                    "rounded-2xl bg-black border border-white/5",
+                    mobileShareFocus === "screen"
+                      ? "absolute inset-0 z-0"
+                      : "absolute bottom-24 right-3 w-28 h-44 z-30 shadow-2xl",
+                    "md:relative md:flex-[3] md:inset-auto md:w-auto md:h-auto md:z-auto md:shadow-none",
+                  ].join(" ")
             }>
+              {/* Mobile-only tap target — toggles share/faces focus. Hidden on
+                  desktop, which uses the side focus-tab button instead. */}
+              <button
+                type="button"
+                onClick={() =>
+                  setMobileShareFocus((f) => (f === "screen" ? "faces" : "screen"))
+                }
+                className="md:hidden absolute inset-0 z-20"
+                aria-label="Alternar entre pantalla compartida y participantes"
+              />
+              {/* Discoverability hint for the tap gesture — only while the share
+                  is fullscreen (mobile, "screen" focus); the PiP is its own
+                  obvious tap target in "faces" focus. */}
+              {mobileShareFocus === "screen" && (
+                <div className="md:hidden absolute top-2 right-2 z-20 pointer-events-none flex items-center gap-1 bg-black/60 backdrop-blur-sm text-[#4edea3] text-[9px] font-headline uppercase tracking-widest px-2 py-1 rounded-lg">
+                  <span className="material-symbols-outlined text-sm">swap_vert</span>
+                  Toca: participantes
+                </div>
+              )}
               {/* Media layer — keeps its own overflow-hidden so the video keeps
                   the rounded corners, while the focus tab below can overflow
                   the panel's right edge without being clipped. */}
@@ -1048,7 +1084,7 @@ export default function ZoomRoomInner({
                   visible. */}
               <button
                 onClick={() => setIsVideosPanelHidden((v) => !v)}
-                className="absolute top-1/2 -translate-y-1/2 right-0 translate-x-1/2 z-20 flex items-center justify-center bg-black/70 backdrop-blur-sm text-[#4edea3] w-7 h-12 rounded-md border border-white/10 shadow-lg hover:bg-black/90 transition-all active:scale-95 cursor-pointer"
+                className="hidden md:flex absolute top-1/2 -translate-y-1/2 right-0 translate-x-1/2 z-20 items-center justify-center bg-black/70 backdrop-blur-sm text-[#4edea3] w-7 h-12 rounded-md border border-white/10 shadow-lg hover:bg-black/90 transition-all active:scale-95 cursor-pointer"
                 aria-label={isVideosPanelHidden ? "Mostrar paneles de video" : "Ocultar paneles de video"}
                 title={isVideosPanelHidden ? "Mostrar participantes" : "Ocultar participantes"}
               >
@@ -1063,12 +1099,20 @@ export default function ZoomRoomInner({
               flex-col in share mode (25% column with stacked panels).
             */}
             <div className={(isSharingScreen || isReceivingShare)
-              ? (isVideosPanelHidden ? "hidden" : "flex-[1] flex flex-col gap-3 min-h-0")
+              ? (isVideosPanelHidden
+                  ? "hidden"
+                  : [
+                      mobileShareFocus === "screen"
+                        ? "absolute bottom-24 right-3 z-30 w-28 h-44"
+                        : "absolute inset-0 z-10",
+                      "flex flex-col gap-2",
+                      "md:static md:flex-[1] md:inset-auto md:w-auto md:h-auto md:z-auto md:gap-3 md:min-h-0",
+                    ].join(" "))
               : "contents"
             }>
 
               {/* ── Remote / Tutor panel ── */}
-              <div className={`flex flex-col gap-3 ${isSharingScreen || isReceivingShare ? "flex-1 min-h-0" : "h-full min-h-[300px]"}`}>
+              <div className={`flex flex-col gap-3 ${isSharingScreen || isReceivingShare ? "flex-1 min-h-0" : "flex-1 min-h-0 md:h-full md:min-h-[300px]"}`}>
                 <section ref={remoteSectionRef} className="flex-1 relative group overflow-hidden rounded-2xl bg-surface-container shadow-2xl border border-white/5">
                   {/*
                     remoteMountRef div is ALWAYS in the DOM so makeVPC() always
@@ -1108,7 +1152,7 @@ export default function ZoomRoomInner({
                   )}
                 </section>
 
-                <div className="flex items-center gap-2 px-1">
+                <div className={`flex items-center gap-2 px-1 ${(isSharingScreen || isReceivingShare) ? "hidden md:flex" : ""}`}>
                   {primaryRemote ? (
                     <>
                       <span className="w-2 h-2 rounded-full bg-[#4edea3] animate-pulse" />
@@ -1128,7 +1172,13 @@ export default function ZoomRoomInner({
               </div>
 
               {/* ── Local / Self panel ── */}
-              <div className={`flex flex-col gap-3 ${isSharingScreen || isReceivingShare ? "flex-1 min-h-0" : "h-full min-h-[300px]"}`}>
+              {/* On mobile while sharing, the PiP shows only the remote panel
+                  in "screen" focus — hide self there; desktop always shows it. */}
+              <div className={`flex flex-col gap-3 ${
+                isSharingScreen || isReceivingShare
+                  ? `flex-1 min-h-0 ${mobileShareFocus === "screen" ? "hidden md:flex" : ""}`
+                  : "flex-1 min-h-0 md:h-full md:min-h-[300px]"
+              }`}>
                 <section ref={localSectionRef} className="flex-1 relative overflow-hidden rounded-2xl bg-surface-container shadow-2xl border border-white/5">
                   {/* Always-present Zoom mount — video-player-container lives here */}
                   <div ref={localMountRef} className="absolute inset-0" />
@@ -1162,7 +1212,7 @@ export default function ZoomRoomInner({
                   )}
                 </section>
 
-                <div className="flex items-center gap-2 px-1">
+                <div className={`flex items-center gap-2 px-1 ${(isSharingScreen || isReceivingShare) ? "hidden md:flex" : ""}`}>
                   <span
                     className="w-2 h-2 rounded-full"
                     style={{ background: isConnected ? "#4edea3" : "rgba(255,255,255,.1)" }}
