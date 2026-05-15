@@ -29,6 +29,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import SessionChat from "./SessionChat";
+import BrandLogo from "@/components/BrandLogo";
 import { useSessionChatStream } from "@/hooks/useSessionChatStream";
 import { useZoomConnectionQuality } from "@/hooks/useZoomConnectionQuality";
 
@@ -293,6 +294,7 @@ export default function ZoomRoomInner({
   >([]);
   const [isSharingScreen, setIsSharingScreen]   = useState(false);
   const [isReceivingShare, setIsReceivingShare] = useState(false);
+  const [isVideosPanelHidden, setIsVideosPanelHidden] = useState(false);
   const [remoteCamOffIds, setRemoteCamOffIds]   = useState<number[]>([]);
   const [remoteMutedIds,  setRemoteMutedIds]    = useState<number[]>([]);
   // Reactive copies of clientRef and selfUserIdRef so useZoomConnectionQuality
@@ -818,6 +820,13 @@ export default function ZoomRoomInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Reset focus mode when sharing ends ────────────────────────────────────
+  // Ensures re-entering share mode always starts with the video column visible
+  // and never leaves the non-share grid in a `hidden` state.
+  useEffect(() => {
+    if (!isSharingScreen && !isReceivingShare) setIsVideosPanelHidden(false);
+  }, [isSharingScreen, isReceivingShare]);
+
   // ── Video cover-fill ──────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -960,10 +969,11 @@ export default function ZoomRoomInner({
         <header className="shrink-0 bg-[#131315]/80 backdrop-blur-md border-b border-white/5 shadow-xl flex justify-between items-center w-full px-4 md:px-8 h-16">
           <div className="flex items-center gap-6">
             <span
-              className="text-xl font-black tracking-tighter"
+              className="flex items-center gap-2 text-xl font-black tracking-tighter"
               style={{ fontFamily: "var(--font-headline, Manrope), sans-serif", color: "#e5e1e4" }}
             >
-              GUSTAVO<span style={{ color: "#4edea3" }}>AI.DEV</span>
+              <BrandLogo size={20} />
+              <span>GUSTAVO<span style={{ color: "#4edea3" }}>AI.DEV</span></span>
             </span>
             <div className="h-4 w-[1px] bg-outline-variant/30 hidden md:block" />
             <div
@@ -996,36 +1006,53 @@ export default function ZoomRoomInner({
         <main className="flex-1 min-h-0 md:px-8 flex gap-6 overflow-hidden">
 
           {/* Content area — switches between 2-col grid (normal) and 75/25 flex row (sharing) */}
-          <div className={`flex-1 min-h-0 py-4 px-4 md:px-0 overflow-hidden ${
+          <div className={`flex-1 min-h-0 py-4 px-4 md:px-0 ${
             isSharingScreen || isReceivingShare
-              ? "flex flex-row gap-4"
-              : "grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto md:overflow-hidden"
+              ? "flex flex-row gap-4 overflow-visible"
+              : "grid grid-cols-1 md:grid-cols-2 gap-6 overflow-hidden overflow-y-auto md:overflow-hidden"
           }`}>
 
             {/* ── Screen share panel — both elements always in DOM so refs are valid ── */}
             <div className={(isSharingScreen || isReceivingShare)
-              ? "flex-[3] relative rounded-2xl overflow-hidden bg-black border border-white/5"
+              ? "flex-[3] relative rounded-2xl bg-black border border-white/5"
               : "hidden"
             }>
-              {/* Local preview — used by startShareScreen; hidden when viewing remote share */}
-              <video
-                ref={shareVideoRef}
-                className={`absolute inset-0 w-full h-full object-contain${isReceivingShare ? " hidden" : ""}`}
-                autoPlay
-                muted
-                playsInline
-              />
-              {/* Remote view canvas — used by startShareView; explicit intrinsic dimensions
-                  so the SDK's codec setup reads non-zero canvas.width/height even when hidden */}
-              <canvas
-                ref={shareCanvasRef}
-                width={1280}
-                height={720}
-                className={`absolute inset-0 w-full h-full object-contain${isReceivingShare ? "" : " hidden"}`}
-              />
-              <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-sm text-[#4edea3] text-[9px] px-2 py-1 rounded-lg font-headline uppercase tracking-widest">
-                Pantalla compartida
+              {/* Media layer — keeps its own overflow-hidden so the video keeps
+                  the rounded corners, while the focus tab below can overflow
+                  the panel's right edge without being clipped. */}
+              <div className="absolute inset-0 rounded-2xl overflow-hidden">
+                {/* Local preview — used by startShareScreen; hidden when viewing remote share */}
+                <video
+                  ref={shareVideoRef}
+                  className={`absolute inset-0 w-full h-full object-contain${isReceivingShare ? " hidden" : ""}`}
+                  autoPlay
+                  muted
+                  playsInline
+                />
+                {/* Remote view canvas — used by startShareView; explicit intrinsic dimensions
+                    so the SDK's codec setup reads non-zero canvas.width/height even when hidden */}
+                <canvas
+                  ref={shareCanvasRef}
+                  width={1280}
+                  height={720}
+                  className={`absolute inset-0 w-full h-full object-contain${isReceivingShare ? "" : " hidden"}`}
+                />
               </div>
+              {/* Focus toggle — straddles the right border, vertically centered
+                  (half outside / half inside). Arrow points right to expand
+                  (hide the video column) and left to restore it. Sits outside
+                  the media layer's overflow-hidden so its outer half stays
+                  visible. */}
+              <button
+                onClick={() => setIsVideosPanelHidden((v) => !v)}
+                className="absolute top-1/2 -translate-y-1/2 right-0 translate-x-1/2 z-20 flex items-center justify-center bg-black/70 backdrop-blur-sm text-[#4edea3] w-7 h-12 rounded-md border border-white/10 shadow-lg hover:bg-black/90 transition-all active:scale-95 cursor-pointer"
+                aria-label={isVideosPanelHidden ? "Mostrar paneles de video" : "Ocultar paneles de video"}
+                title={isVideosPanelHidden ? "Mostrar participantes" : "Ocultar participantes"}
+              >
+                <span className="material-symbols-outlined text-xl">
+                  {isVideosPanelHidden ? "chevron_left" : "chevron_right"}
+                </span>
+              </button>
             </div>
 
             {/*
@@ -1033,7 +1060,7 @@ export default function ZoomRoomInner({
               flex-col in share mode (25% column with stacked panels).
             */}
             <div className={(isSharingScreen || isReceivingShare)
-              ? "flex-[1] flex flex-col gap-3 min-h-0"
+              ? (isVideosPanelHidden ? "hidden" : "flex-[1] flex flex-col gap-3 min-h-0")
               : "contents"
             }>
 
