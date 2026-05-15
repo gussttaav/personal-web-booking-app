@@ -27,7 +27,12 @@ jobs:
             echo "PR already exists for $BRANCH — nothing to do."
             exit 0
           fi
+          # Derive a readable title from the branch name instead of using
+          # --fill, which diffs origin/staging and fails on the shallow,
+          # single-branch checkout (origin/staging is not fetched).
+          TITLE="$(echo "${BRANCH#*/}" | tr '-' ' ')"
           gh pr create \
             --base staging \
             --head "$BRANCH" \
-            --fill
+            --title "$TITLE" \
+            --body "Automated PR for \`$BRANCH\`."
