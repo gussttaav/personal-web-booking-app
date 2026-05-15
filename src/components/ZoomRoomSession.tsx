@@ -29,6 +29,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import SessionChat from "./SessionChat";
+import SessionSettings from "./SessionSettings";
 import BrandLogo from "@/components/BrandLogo";
 import { useSessionChatStream } from "@/hooks/useSessionChatStream";
 import { useZoomConnectionQuality } from "@/hooks/useZoomConnectionQuality";
@@ -287,6 +288,7 @@ export default function ZoomRoomInner({
   const [isMuted, setIsMuted]         = useState(false);
   const [isCamOff, setIsCamOff]       = useState(false);
   const [isChatOpen, setIsChatOpen]   = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeSpeakers, setActiveSpeakers] = useState<number[]>([]);
   const [remoteUsers, setRemoteUsers] = useState<
@@ -987,6 +989,7 @@ export default function ZoomRoomInner({
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 mr-4 hidden md:flex">
               <button
+                onClick={() => setIsSettingsOpen(true)}
                 className="p-2 text-[#e5e1e4]/60 hover:text-[#4edea3] transition-colors cursor-pointer active:opacity-80"
                 aria-label="Ajustes"
               >
@@ -1201,6 +1204,15 @@ export default function ZoomRoomInner({
               />
             </div>
           </div>
+        )}
+
+        {/* ── Settings drawer ── */}
+        {isSettingsOpen && isConnected && (
+          <SessionSettings
+            stream={streamRef.current}
+            qos={qos}
+            onClose={() => setIsSettingsOpen(false)}
+          />
         )}
 
         {/* ── Bottom Controls Bar — shrink-0 so it never overlaps main ── */}
