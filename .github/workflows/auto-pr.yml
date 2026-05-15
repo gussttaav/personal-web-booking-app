@@ -1,0 +1,33 @@
+name: Auto PR
+
+# Opens a pull request automatically the first time a feature branch is
+# pushed. Pushing again to a branch that already has an open PR is a no-op.
+on:
+  push:
+    branches-ignore:
+      - main
+      - staging
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open PR against staging if none exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          if gh pr view "$BRANCH" --json number --jq .number >/dev/null 2>&1; then
+            echo "PR already exists for $BRANCH — nothing to do."
+            exit 0
+          fi
+          gh pr create \
+            --base staging \
+            --head "$BRANCH" \
+            --fill
