@@ -2,10 +2,101 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Spinner } from "@/components/ui";
 import { COLORS } from "@/constants";
-
+import {
+  Spinner,
+  ATMOSPHERE_BG,
+  FeedbackMain,
+  IconHalo,
+  Eyebrow,
+  FbTitle,
+  FbBody,
+  HeaderBlock,
+  InfoBox,
+  InfoRow,
+  FbButton,
+  LoadingDots,
+  Steps,
+  ConfirmationChecklist,
+  Helper,
+  MiniIcon,
+} from "@/components/ui";
 const DURATION_LABELS: Record<string, string> = { "1h": "1 hora", "2h": "2 horas" };
+
+// Static single-session prices (mirror SESSION_CONFIGS in BookingModeView).
+// Inlined deliberately: importing the BookingModeView component into this
+// route just for two constants drags its whole interactive graph
+// (WeeklyCalendar, BookingLayout, …) into the bundle.
+const PRICE_BY_DURATION: Record<string, string> = { "1h": "€16", "2h": "€30" };
+
+/** Single-session price for a Stripe `session_duration`. */
+function priceForDuration(d: string): string | undefined {
+  return PRICE_BY_DURATION[d];
+}
+
+// ─── Payment-only blocks ────────────────────────────────────────────────────
+
+function ReceiptBlock({ duration }: { duration: string }) {
+  const name  = `${DURATION_LABELS[duration] ?? duration} · individual`;
+  const price = priceForDuration(duration);
+  return (
+    <div
+      style={{
+        background: "rgba(78,222,163,0.07)", border: `1px solid ${COLORS.successBorder}`,
+        borderRadius: 11, padding: "14px 16px",
+        display: "flex", alignItems: "center", gap: 14,
+      }}
+    >
+      <div
+        style={{
+          flexShrink: 0, width: 38, height: 38, borderRadius: 9,
+          background: "rgba(78,222,163,0.12)", border: `1px solid ${COLORS.brandBorder}`,
+          display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.brand,
+        }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">
+          school
+        </span>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p
+          style={{
+            fontSize: 10, fontWeight: 700, color: COLORS.brand,
+            letterSpacing: "0.12em", textTransform: "uppercase", margin: "0 0 2px",
+          }}
+        >
+          Sesión pagada
+        </p>
+        <p
+          style={{
+            fontFamily: "var(--font-headline)", fontSize: 14, fontWeight: 700,
+            color: COLORS.textPrimary, margin: 0,
+          }}
+        >
+          {name}
+        </p>
+      </div>
+      {price && (
+        <div
+          style={{
+            fontFamily: "var(--font-headline)", fontSize: 18, fontWeight: 800,
+            color: COLORS.brand, letterSpacing: "-0.01em", lineHeight: 1, textAlign: "right",
+          }}
+        >
+          {price}
+          <small
+            style={{
+              display: "block", fontFamily: "inherit", fontSize: 10,
+              color: COLORS.textMuted, fontWeight: 500, marginTop: 4,
+            }}
+          >
+            IVA incluido
+          </small>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SesionConfirmadaContent() {
   const params          = useSearchParams();
@@ -25,53 +116,141 @@ function SesionConfirmadaContent() {
       .catch(() => { setErrorMsg("Error al verificar el pago."); setState("error"); });
   }, [paymentIntentId]);
 
-  if (state === "loading") return <PageShell><Spinner /><p className="text-sm mt-3" style={{ color: COLORS.textSecondary }}>Verificando pago...</p></PageShell>;
+  // ── Loading — verifying payment ──
+  if (state === "loading") {
+    return (
+      <FeedbackMain>
+        <IconHalo tone="neutral" spinner />
+        <HeaderBlock>
+          <Eyebrow tone="neutral">Pago recibido</Eyebrow>
+          <FbTitle>Verificando tu pago</FbTitle>
+          <FbBody>
+            Estamos confirmando con Stripe que el cobro se procesó correctamente y
+            registrando tu sesión.
+          </FbBody>
+        </HeaderBlock>
 
-  if (state === "error") return (
-    <PageShell>
-      <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto text-xl" style={{ background: COLORS.errorBg, color: COLORS.error }} aria-hidden="true">✕</div>
-      <h1 className="text-xl font-bold text-center" style={{ color: COLORS.textPrimary }}>Algo salió mal</h1>
-      <p className="text-sm text-center" style={{ color: COLORS.textSecondary }}>{errorMsg}</p>
-      <button onClick={() => router.push("/")} className="w-full py-2.5 rounded-xl text-sm font-medium" style={{ background: COLORS.surface, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}`, cursor: "pointer" }}>Volver al inicio</button>
-    </PageShell>
-  );
+        <Steps
+          items={[
+            { glyph: "check", label: "Pago procesado por Stripe", state: "done" },
+            { glyph: "sync", label: "Verificando los detalles", state: "load" },
+            { glyph: "mail", label: "Enviar email de confirmación", state: "wait" },
+          ]}
+        />
 
+        <FbButton variant="disabled">
+          Verificando
+          <LoadingDots />
+        </FbButton>
+
+        <Helper>
+          <MiniIcon glyph="lock" />
+          Tu pago está seguro · no cierres la página
+        </Helper>
+      </FeedbackMain>
+    );
+  }
+
+  // ── Error — verification failed (payment still safe) ──
+  if (state === "error") {
+    return (
+      <FeedbackMain>
+        <IconHalo tone="error" glyph="error" />
+        <HeaderBlock>
+          <Eyebrow tone="error">No se pudo verificar</Eyebrow>
+          <FbTitle>Algo salió mal</FbTitle>
+          <FbBody>
+            No pudimos confirmar los detalles de tu sesión, pero{" "}
+            <strong style={{ color: COLORS.textPrimary, fontWeight: 600 }}>
+              tu pago está seguro
+            </strong>
+            .
+          </FbBody>
+        </HeaderBlock>
+
+        <InfoBox tone="error">
+          <InfoRow glyph="info" tone="error">
+            {errorMsg}
+          </InfoRow>
+          <InfoRow glyph="mail" tone="error">
+            Si el cobro fue correcto, llegará un{" "}
+            <b style={{ color: COLORS.textPrimary, fontWeight: 600 }}>email de confirmación</b>{" "}
+            automático en los próximos minutos.
+          </InfoRow>
+          {paymentIntentId && (
+            <InfoRow glyph="tag" tone="error">
+              Referencia ·{" "}
+              <b style={{ fontFamily: "var(--font-mono, monospace)", fontSize: 12, color: COLORS.textPrimary }}>
+                {paymentIntentId}
+              </b>
+            </InfoRow>
+          )}
+        </InfoBox>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <FbButton
+            variant="primary"
+            onClick={() => { window.location.href = "mailto:contacto@gustavoai.dev"; }}
+            style={{ width: "100%" }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">forum</span>
+            Contactar con Gustavo
+          </FbButton>
+          <FbButton variant="ghost" onClick={() => router.push("/")} style={{ width: "100%" }}>
+            Volver al inicio
+          </FbButton>
+        </div>
+
+        <Helper>
+          Escribe a{" "}
+          <a href="mailto:contacto@gustavoai.dev" style={{ color: COLORS.brand, textDecoration: "none" }}>
+            contacto@gustavoai.dev
+          </a>{" "}
+          con la referencia
+        </Helper>
+      </FeedbackMain>
+    );
+  }
+
+  // ── Success — payment confirmed ──
   return (
-    <PageShell>
-      <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto text-2xl" style={{ background: COLORS.brandMuted, color: COLORS.brand }} aria-hidden="true">✓</div>
-      <div className="text-center">
-        <h1 className="text-2xl font-bold" style={{ color: COLORS.textPrimary }}>¡Pago confirmado!</h1>
-        <p className="mt-2 text-sm" style={{ color: COLORS.textSecondary }}>
-          Tu sesión de <strong style={{ color: COLORS.textPrimary }}>{DURATION_LABELS[duration] ?? duration}</strong> ha sido reservada y pagada.
-        </p>
-      </div>
-      <div className="rounded-xl p-4 text-sm space-y-2" style={{ background: COLORS.background, border: `1px solid ${COLORS.border}` }}>
-        <p style={{ color: COLORS.textSecondary }}>📧 Revisa tu email — incluye el enlace para unirte al aula virtual y los enlaces para cancelar o reprogramar</p>
-        <p style={{ color: COLORS.textSecondary }}>📅 El email incluye un enlace para añadir el evento a tu calendario</p>
-        <p style={{ color: COLORS.textSecondary }}>👤 También puedes unirte, reprogramar o cancelar desde tu área personal en la plataforma</p>
-        <p style={{ color: COLORS.textSecondary }}>↩️ Puedes reprogramar sin coste hasta 2 horas antes de la clase</p>
-        <p style={{ color: COLORS.textSecondary }}>❌ Las cancelaciones con más de 2 horas de antelación están sujetas a la comisión de devolución de Stripe (0,25 € + aprox. 1,5–1,9 % del importe); con menos de 2 horas no se realiza reembolso</p>
-      </div>
-      <button onClick={() => router.push("/")} className="w-full py-2.5 rounded-xl text-sm font-medium" style={{ background: COLORS.brand, color: "#0d0f10", border: "none", cursor: "pointer" }}>
-        Volver al inicio
-      </button>
-    </PageShell>
-  );
-}
+    <FeedbackMain>
+      <IconHalo tone="success" glyph="check" />
+      <HeaderBlock>
+        <Eyebrow tone="success">Pago confirmado</Eyebrow>
+        <FbTitle>¡Tu sesión está reservada!</FbTitle>
+        <FbBody>¡Todo listo! Revisa tu correo para ver los detalles.</FbBody>
+      </HeaderBlock>
 
-function PageShell({ children }: { children: React.ReactNode }) {
-  return (
-    <main className="min-h-screen flex items-center justify-center p-4" style={{ background: COLORS.background, position: "relative", zIndex: 1 }}>
-      <div className="rounded-2xl shadow-2xl p-8 sm:p-10 max-w-md w-full space-y-6" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
-        {children}
+      <ReceiptBlock duration={duration} />
+
+      <ConfirmationChecklist />
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <FbButton variant="primary" onClick={() => router.push("/area-personal")} style={{ width: "100%" }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">login</span>
+          Ir a mi área personal
+        </FbButton>
+        <FbButton variant="ghost" onClick={() => router.push("/")} style={{ width: "100%" }}>
+          Volver al inicio
+        </FbButton>
       </div>
-    </main>
+    </FeedbackMain>
   );
 }
 
 export default function SesionConfirmadaPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center" style={{ background: COLORS.background }}><Spinner /></div>}>
+    <Suspense
+      fallback={
+        <div
+          className="min-h-screen flex items-center justify-center"
+          style={{ background: ATMOSPHERE_BG }}
+        >
+          <Spinner />
+        </div>
+      }
+    >
       <SesionConfirmadaContent />
     </Suspense>
   );

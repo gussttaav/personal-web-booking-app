@@ -43,12 +43,9 @@ export default function BookingLayout({ children }: BookingLayoutProps) {
       <Navbar />
 
       <main
+        className="pt-20 pb-10 px-4 sm:pt-32 sm:pb-20 sm:px-6"
         style={{
           flex: 1,
-          paddingTop: "128px",
-          paddingBottom: "80px",
-          paddingLeft: "24px",
-          paddingRight: "24px",
           maxWidth: "1440px",
           margin: "0 auto",
           width: "100%",
