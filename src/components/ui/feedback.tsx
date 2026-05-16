@@ -30,15 +30,15 @@ export const ATMOSPHERE_BG =
 
 // ─── Page shell ─────────────────────────────────────────────────────────────
 
-/** The 380px feedback card box (no page chrome). Use inside any layout. */
+/** The feedback card box (no page chrome). Use inside any layout. */
 export function FeedbackCard({ children }: { children: ReactNode }) {
   return (
     <div
+      className="flex flex-col gap-3 p-5 sm:gap-5 sm:p-7"
       style={{
-        position: "relative", width: "100%", maxWidth: 380,
+        position: "relative", width: "100%", maxWidth: 480,
         background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-        borderRadius: 16, padding: "30px 28px",
-        display: "flex", flexDirection: "column", gap: 20,
+        borderRadius: 16,
         boxShadow: "0 24px 60px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.03)",
       }}
     >
@@ -51,7 +51,7 @@ export function FeedbackCard({ children }: { children: ReactNode }) {
 export function FeedbackMain({ children }: { children: ReactNode }) {
   return (
     <main
-      className="min-h-screen flex items-center justify-center p-4"
+      className="min-h-screen flex items-center justify-center px-2 py-6 sm:px-6"
       style={{ background: ATMOSPHERE_BG }}
     >
       <FeedbackCard>{children}</FeedbackCard>

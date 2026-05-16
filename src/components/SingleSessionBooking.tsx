@@ -138,7 +138,6 @@ function EventCard({
         >
           {dateLabel && <MetaItem glyph="calendar_today">{dateLabel}</MetaItem>}
           {timeLabel && <MetaItem glyph="schedule">{timeLabel}</MetaItem>}
-          <MetaItem glyph="videocam">Aula virtual</MetaItem>
         </div>
       </div>
     </div>
@@ -284,8 +283,7 @@ export default function SingleSessionBooking({
   if (phase === "success") {
     return (
       <BookingLayout>
-        <WizardProgress currentStep={3} showPaymentStep={needsPaymentStep} />
-        <div className="flex items-center justify-center p-6">
+        <div className="flex items-start sm:items-center justify-center px-2 py-2 sm:py-6 sm:px-6">
           <FeedbackCard>
             <IconHalo tone="success" glyph="check" />
 
@@ -294,19 +292,15 @@ export default function SingleSessionBooking({
                 {emailFailed ? "Reservada · email no enviado" : "Encuentro reservado"}
               </Eyebrow>
               <FbTitle>¡Tu sesión está confirmada!</FbTitle>
-              <FbBody>
-                {emailFailed ? (
-                  <>
-                    Hemos bloqueado el horario, pero{" "}
-                    <strong style={{ color: COLORS.textPrimary, fontWeight: 600 }}>
-                      no pudimos enviarte el email
-                    </strong>{" "}
-                    de confirmación.
-                  </>
-                ) : (
-                  "Nos vemos pronto!"
-                )}
-              </FbBody>
+              {emailFailed && (
+                <FbBody>
+                  Se ha reservado la sesión, pero{" "}
+                  <strong style={{ color: COLORS.textPrimary, fontWeight: 600 }}>
+                    no se pudo enviar el email
+                  </strong>{" "}
+                  de confirmación.
+                </FbBody>
+              )}
             </HeaderBlock>
 
             <EventCard
@@ -317,25 +311,11 @@ export default function SingleSessionBooking({
 
             {emailFailed ? (
               <InfoBox tone="warning">
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.warning, marginBottom: 4 }}>
-                    No te llegó el email — accede a tu sesión aquí
-                  </div>
-                  <a
-                    href={sessionUrl}
-                    style={{ display: "block", color: COLORS.brand, textDecoration: "none", fontSize: 13, fontWeight: 500, marginTop: 4 }}
-                  >
-                    Unirse al aula virtual →
-                  </a>
-                  {cancelUrl && (
-                    <a
-                      href={cancelUrl}
-                      style={{ display: "block", color: COLORS.textSecondary, textDecoration: "none", fontSize: 13, marginTop: 6 }}
-                    >
-                      Cancelar esta reserva
-                    </a>
-                  )}
-                </div>
+                <InfoRow glyph="manage_accounts" tone="warning">
+                  Puedes unirte, cancelar o reprogramar la sesión desde tu{" "}
+                  <strong style={{ color: COLORS.textPrimary, fontWeight: 600 }}>área personal</strong>.
+                  El problema con el email se resolverá a la mayor brevedad.
+                </InfoRow>
               </InfoBox>
             ) : (
               <ConfirmationChecklist />
@@ -373,8 +353,7 @@ export default function SingleSessionBooking({
   if (phase === "error") {
     return (
       <BookingLayout>
-        <WizardProgress currentStep={2} showPaymentStep={needsPaymentStep} />
-        <div className="flex items-center justify-center p-6">
+        <div className="flex items-start sm:items-center justify-center px-2 py-2 sm:py-6 sm:px-6">
           <FeedbackCard>
             <IconHalo tone="error" glyph="error" />
 
@@ -382,11 +361,7 @@ export default function SingleSessionBooking({
               <Eyebrow tone="error">Algo salió mal</Eyebrow>
               <FbTitle>No pudimos completar tu reserva</FbTitle>
               <FbBody>
-                El horario sigue disponible y{" "}
-                <strong style={{ color: COLORS.textPrimary, fontWeight: 600 }}>
-                  no se ha realizado ningún cargo
-                </strong>
-                . Puedes intentarlo de nuevo.
+                El horario sigue disponible, puedes intentarlo de nuevo.
               </FbBody>
             </HeaderBlock>
 

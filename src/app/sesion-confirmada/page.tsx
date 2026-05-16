@@ -169,15 +169,6 @@ function SesionConfirmadaContent() {
         </HeaderBlock>
 
         <InfoBox tone="error">
-          <InfoRow glyph="verified_user" tone="error">
-            <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.error, marginBottom: 2 }}>
-              Tu pago no se ha duplicado
-            </div>
-            <div style={{ color: COLORS.textSecondary, lineHeight: 1.5 }}>
-              Stripe procesa cada cobro una sola vez. Lo verás en tu cuenta y en tu
-              extracto bancario.
-            </div>
-          </InfoRow>
           <InfoRow glyph="info" tone="error">
             {errorMsg}
           </InfoRow>
@@ -228,7 +219,7 @@ function SesionConfirmadaContent() {
       <HeaderBlock>
         <Eyebrow tone="success">Pago confirmado</Eyebrow>
         <FbTitle>¡Tu sesión está reservada!</FbTitle>
-        <FbBody>Hemos bloqueado el horario y enviado los detalles a tu correo.</FbBody>
+        <FbBody>¡Todo listo! Revisa tu correo para ver los detalles.</FbBody>
       </HeaderBlock>
 
       <ReceiptBlock duration={duration} />
