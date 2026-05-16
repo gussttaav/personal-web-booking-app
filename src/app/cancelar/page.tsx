@@ -1,9 +1,23 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { COLORS } from "@/constants";
-import { Spinner } from "@/components/ui";
+import {
+  Spinner,
+  ATMOSPHERE_BG,
+  FeedbackMain,
+  IconHalo,
+  Eyebrow,
+  FbTitle,
+  FbBody,
+  HeaderBlock,
+  InfoBox,
+  InfoRow,
+  FbButton,
+  Helper,
+  MiniIcon,
+} from "@/components/ui";
 
 type PageState = "loading" | "confirm" | "processing" | "success" | "error";
 
@@ -43,177 +57,122 @@ function CancelarContent() {
   }
 
   return (
-    <main
-      className="min-h-screen flex items-center justify-center p-4"
-      style={{ background: COLORS.background }}
-    >
-      <div
-        className="rounded-2xl p-8 sm:p-10 max-w-md w-full space-y-6"
-        style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}
-      >
-        {/* ── Confirm ── */}
-        {state === "confirm" && (
-          <>
-            <div className="text-center space-y-2">
-              <div
-                className="w-14 h-14 rounded-full flex items-center justify-center mx-auto text-2xl"
-                style={{ background: COLORS.warningBg, color: COLORS.warning }}
-                aria-hidden="true"
-              >
-                ↩
-              </div>
-              <h1 className="text-xl font-bold" style={{ color: COLORS.textPrimary }}>
-                Cancelar reserva
-              </h1>
-              <p className="text-sm" style={{ color: COLORS.textSecondary }}>
-                ¿Confirmas que quieres cancelar esta sesión? Esta acción no se puede deshacer.
-              </p>
-            </div>
+    <FeedbackMain>
+      {/* ── Confirm ── */}
+      {state === "confirm" && (
+        <>
+          <IconHalo tone="warning" glyph="event_busy" />
 
-            <div
-              className="rounded-xl p-4 text-sm"
-              style={{ background: COLORS.background, border: `1px solid ${COLORS.border}` }}
-            >
-              <p style={{ color: COLORS.textSecondary, margin: 0 }}>
-                Si tienes clases de pack, el crédito se devolverá automáticamente.
-                Para sesiones individuales pagadas, Gustavo tramitará el reembolso en 1–3 días hábiles.
-              </p>
-            </div>
+          <HeaderBlock>
+            <Eyebrow tone="warning">Confirmación requerida</Eyebrow>
+            <FbTitle>Cancelar reserva</FbTitle>
+            <FbBody>
+              ¿Confirmas que quieres cancelar esta sesión? Esta acción no se puede deshacer.
+            </FbBody>
+          </HeaderBlock>
 
-            <div style={{ display: "flex", gap: 12 }}>
-              <button
-                onClick={() => router.push("/")}
-                style={{
-                  flex: 1, padding: "11px", borderRadius: 8,
-                  background: "none", border: `1px solid ${COLORS.border}`,
-                  color: COLORS.textMuted, fontSize: 14, cursor: "pointer",
-                  fontFamily: "inherit", transition: "border-color 0.15s",
-                }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.2)")}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = COLORS.border)}
-              >
-                Mantener reserva
-              </button>
-              <button
-                onClick={handleConfirm}
-                style={{
-                  flex: 1, padding: "11px", borderRadius: 8,
-                  background: COLORS.error, border: "none",
-                  color: "#fff", fontSize: 14, fontWeight: 500,
-                  cursor: "pointer", fontFamily: "inherit",
-                }}
-              >
-                Sí, cancelar
-              </button>
-            </div>
-          </>
-        )}
+          <InfoBox>
+            <InfoRow glyph="redeem">
+              Si tienes clases de <b style={{ color: COLORS.textPrimary, fontWeight: 600 }}>pack</b>,
+              el crédito se devolverá automáticamente.
+            </InfoRow>
+            <InfoRow glyph="payments">
+              Para sesiones individuales pagadas, Gustavo tramitará el{" "}
+              <b style={{ color: COLORS.textPrimary, fontWeight: 600 }}>reembolso en 1–3 días</b> hábiles.
+            </InfoRow>
+          </InfoBox>
 
-        {/* ── Processing ── */}
-        {state === "processing" && (
-          <div className="text-center space-y-4">
-            <Spinner />
-            <p className="text-sm" style={{ color: COLORS.textSecondary }}>
-              Procesando cancelación…
-            </p>
+          <div style={{ display: "flex", gap: 10 }}>
+            <FbButton variant="ghost" onClick={() => router.push("/")} style={{ flex: 1 }}>
+              Mantener reserva
+            </FbButton>
+            <FbButton variant="danger" onClick={handleConfirm} style={{ flex: 1 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">
+                delete_outline
+              </span>
+              Sí, cancelar
+            </FbButton>
           </div>
-        )}
 
-        {/* ── Success ── */}
-        {state === "success" && (
-          <>
-            <div className="text-center space-y-2">
-              <div
-                className="w-14 h-14 rounded-full flex items-center justify-center mx-auto text-2xl"
-                style={{ background: COLORS.brandMuted, color: COLORS.brand }}
-                aria-hidden="true"
-              >
-                ✓
-              </div>
-              <h1 className="text-xl font-bold" style={{ color: COLORS.textPrimary }}>
-                Reserva cancelada
-              </h1>
-              <p className="text-sm" style={{ color: COLORS.textSecondary }}>
-                {sessionLabel && `Tu ${sessionLabel.toLowerCase()} ha sido cancelada.`}
-              </p>
-            </div>
+          <Helper>
+            <MiniIcon glyph="lock" />
+            Enlace seguro y de un solo uso
+          </Helper>
+        </>
+      )}
 
-            {creditsBack && (
-              <div
-                className="rounded-xl p-4 text-sm text-center"
-                style={{
-                  background: COLORS.successBg,
-                  border: `1px solid ${COLORS.successBorder}`,
-                }}
-              >
-                <p style={{ color: COLORS.brand, margin: 0, fontWeight: 500 }}>
-                  ✓ Tu crédito ha sido devuelto al pack
-                </p>
-                <p style={{ color: COLORS.textSecondary, margin: "4px 0 0", fontSize: 12 }}>
+      {/* ── Processing ── */}
+      {state === "processing" && (
+        <div
+          className="text-center"
+          style={{ display: "flex", flexDirection: "column", gap: 16, alignItems: "center", padding: "20px 0" }}
+        >
+          <Spinner />
+          <FbBody>Procesando cancelación…</FbBody>
+        </div>
+      )}
+
+      {/* ── Success ── */}
+      {state === "success" && (
+        <>
+          <IconHalo tone="success" glyph="task_alt" />
+
+          <HeaderBlock>
+            <Eyebrow tone="success">Reserva cancelada</Eyebrow>
+            <FbTitle>Reserva cancelada</FbTitle>
+            <FbBody>
+              {sessionLabel && `Tu ${sessionLabel.toLowerCase()} ha sido cancelada.`}
+            </FbBody>
+          </HeaderBlock>
+
+          {creditsBack && (
+            <InfoBox tone="success">
+              <InfoRow glyph="redeem" tone="success">
+                <div style={{ fontWeight: 600, color: COLORS.brand, marginBottom: 1 }}>
+                  Tu crédito ha sido devuelto al pack
+                </div>
+                <div style={{ fontSize: 12.5, color: COLORS.textSecondary, lineHeight: 1.5 }}>
                   Puedes reservar otra clase cuando quieras.
-                </p>
-              </div>
-            )}
+                </div>
+              </InfoRow>
+            </InfoBox>
+          )}
 
-            <p className="text-sm text-center" style={{ color: COLORS.textSecondary }}>
-              Recibirás un email de confirmación en breve.
-            </p>
+          <FbButton variant="primary" onClick={() => router.push("/")} style={{ width: "100%" }}>
+            Volver al inicio
+          </FbButton>
 
-            <button
-              onClick={() => router.push("/")}
-              style={{
-                width: "100%", padding: "11px", borderRadius: 8,
-                background: COLORS.brand, border: "none",
-                color: "#0d0f10", fontSize: 14, fontWeight: 500,
-                cursor: "pointer", fontFamily: "inherit",
-              }}
-            >
-              Volver al inicio
-            </button>
-          </>
-        )}
+          <Helper>
+            <MiniIcon glyph="mail" />
+            Recibirás un email de confirmación en breve
+          </Helper>
+        </>
+      )}
 
-        {/* ── Error ── */}
-        {state === "error" && (
-          <>
-            <div className="text-center space-y-2">
-              <div
-                className="w-14 h-14 rounded-full flex items-center justify-center mx-auto text-xl"
-                style={{ background: COLORS.errorBg, color: COLORS.error }}
-                aria-hidden="true"
-              >
-                ✕
-              </div>
-              <h1 className="text-xl font-bold" style={{ color: COLORS.textPrimary }}>
-                No se pudo cancelar
-              </h1>
-              <p className="text-sm" style={{ color: COLORS.textSecondary }}>
-                {errorMsg}
-              </p>
-            </div>
+      {/* ── Error ── */}
+      {state === "error" && (
+        <>
+          <IconHalo tone="error" glyph="error" />
 
-            <p className="text-sm text-center" style={{ color: COLORS.textSecondary }}>
-              Si necesitas ayuda escribe a{" "}
-              <a href="mailto:contacto@gustavoai.dev" style={{ color: COLORS.brand }}>
-                contacto@gustavoai.dev
-              </a>
-            </p>
+          <HeaderBlock>
+            <Eyebrow tone="error">No se pudo cancelar</Eyebrow>
+            <FbTitle>No se pudo cancelar</FbTitle>
+            <FbBody>{errorMsg}</FbBody>
+          </HeaderBlock>
 
-            <button
-              onClick={() => router.push("/")}
-              style={{
-                width: "100%", padding: "11px", borderRadius: 8,
-                background: "none", border: `1px solid ${COLORS.border}`,
-                color: COLORS.textMuted, fontSize: 14,
-                cursor: "pointer", fontFamily: "inherit",
-              }}
-            >
-              Volver al inicio
-            </button>
-          </>
-        )}
-      </div>
-    </main>
+          <FbButton variant="ghost" onClick={() => router.push("/")} style={{ width: "100%" }}>
+            Volver al inicio
+          </FbButton>
+
+          <Helper>
+            Si necesitas ayuda escribe a{" "}
+            <a href="mailto:contacto@gustavoai.dev" style={{ color: COLORS.brand, textDecoration: "none" }}>
+              contacto@gustavoai.dev
+            </a>
+          </Helper>
+        </>
+      )}
+    </FeedbackMain>
   );
 }
 
@@ -223,7 +182,7 @@ export default function CancelarPage() {
       fallback={
         <div
           className="min-h-screen flex items-center justify-center"
-          style={{ background: COLORS.background }}
+          style={{ background: ATMOSPHERE_BG }}
         >
           <Spinner />
         </div>

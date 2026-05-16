@@ -3,6 +3,8 @@
 import { type ReactNode, type ButtonHTMLAttributes } from "react";
 import { COLORS } from "@/constants";
 
+export * from "./feedback";
+
 // ─── Spinner ──────────────────────────────────────────────────────────────────
 
 export function Spinner({ size = 8, label = "Cargando..." }: { size?: number; label?: string }) {
