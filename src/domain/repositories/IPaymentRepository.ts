@@ -2,7 +2,8 @@
 
 export interface FailedBookingEntry {
   stripeSessionId: string;
-  email:           string;
+  userId:          string;
+  email?:          string;  // populated from JOIN on list, not stored in DB
   startIso:        string;
   failedAt:        string;  // ISO
   error:           string;

@@ -99,7 +99,7 @@ test.describe("Single 1-hour session purchase", () => {
       );
     }
     await expect(
-      page.getByRole("heading", { name: /pago confirmado/i }),
+      page.getByRole("heading", { name: /tu sesión está reservada/i }),
     ).toBeVisible({ timeout: 15_000 });
   });
 });

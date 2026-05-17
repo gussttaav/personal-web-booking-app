@@ -15,7 +15,20 @@
 import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Spinner, Alert } from "@/components/ui";
+import {
+  Spinner,
+  FeedbackCard,
+  IconHalo,
+  Eyebrow,
+  FbTitle,
+  FbBody,
+  HeaderBlock,
+  InfoBox,
+  InfoRow,
+  FbButton,
+  ConfirmationChecklist,
+  Helper,
+} from "@/components/ui";
 import { COLORS } from "@/constants";
 import { friendlyError } from "@/constants/errors";
 import { api, ApiError } from "@/lib/api-client";
@@ -49,6 +62,88 @@ type Phase = "picking" | "review" | "booking" | "paying" | "success" | "error";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "";
 
+/** Full "HH:MM–HH:MM" range from a slot, timezone-aware when available. */
+function formatTimeRange(slot: SelectedSlot): string {
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleTimeString("es-ES", {
+      ...(slot.timezone ? { timeZone: slot.timezone } : {}),
+      hour: "2-digit", minute: "2-digit", hour12: false,
+    });
+  return `${fmt(slot.startIso)}–${fmt(slot.endIso)}`;
+}
+
+// ─── Local feedback pieces (Emerald Nocturne) ──────────────────────────────
+
+function MetaItem({ glyph, children }: { glyph: string; children: React.ReactNode }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+      <span
+        className="material-symbols-outlined"
+        style={{ fontSize: 13, color: COLORS.textMuted }}
+        aria-hidden="true"
+      >
+        {glyph}
+      </span>
+      {children}
+    </span>
+  );
+}
+
+function EventCard({
+  title, dateLabel, timeLabel, tone = "brand",
+}: {
+  title: string;
+  dateLabel?: string;
+  timeLabel?: string;
+  tone?: "brand" | "error";
+}) {
+  const err = tone === "error";
+  const accent = err ? COLORS.error : COLORS.brand;
+  return (
+    <div
+      style={{
+        display: "flex", gap: 14, padding: "14px 16px",
+        background: COLORS.background,
+        border: `1px solid ${err ? "rgba(255,180,171,0.18)" : "rgba(78,222,163,0.18)"}`,
+        borderRadius: 11, alignItems: "center",
+        opacity: err ? 0.7 : 1,
+      }}
+    >
+      <div
+        style={{
+          flexShrink: 0, width: 44, height: 44, borderRadius: 9,
+          background: err ? "rgba(255,180,171,0.08)" : "rgba(78,222,163,0.10)",
+          border: `1px solid ${err ? "rgba(255,180,171,0.22)" : "rgba(78,222,163,0.22)"}`,
+          display: "flex", alignItems: "center", justifyContent: "center", color: accent,
+        }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 22 }} aria-hidden="true">
+          event
+        </span>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p
+          style={{
+            fontFamily: "var(--font-headline)", fontSize: 14, fontWeight: 700,
+            color: COLORS.textPrimary, margin: "0 0 3px",
+          }}
+        >
+          {title}
+        </p>
+        <div
+          style={{
+            display: "flex", flexDirection: "column", gap: 4,
+            fontSize: 12, color: COLORS.textSecondary,
+          }}
+        >
+          {dateLabel && <MetaItem glyph="calendar_today">{dateLabel}</MetaItem>}
+          {timeLabel && <MetaItem glyph="schedule">{timeLabel}</MetaItem>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SingleSessionBooking({
   sessionType,
   userName,
@@ -60,10 +155,35 @@ export default function SingleSessionBooking({
   const router = useRouter();
   const cfg = SESSION_CONFIGS[sessionType];
 
-  // 1h: start in "review" phase with the slot pre-filled (exact match).
-  // 15min/2h: start in "picking" phase but pre-focus the slot in the calendar
-  //           so it appears as if the user already clicked it.
-  const supportsPreSelect = !!initialSlot;
+  // 1h: start in "review" phase with the slot pre-filled (exact duration match
+  //      against AvailabilityModal's 1h slots).
+  // 15min: truncate the 1h slot to its first 15 minutes and jump to review.
+  //      The server validates duration, so we must adjust endIso + label here.
+  // 2h: start in "picking" phase but pre-focus the slot's week in the calendar
+  //      so the user picks the matching 2h sub-slot. We cannot synthesise a 2h
+  //      slot from a 1h hint.
+  const preSelectedSlot: SelectedSlot | null = (() => {
+    if (!initialSlot) return null;
+    if (sessionType === "session1h") return initialSlot;
+    if (sessionType === "free15min") {
+      const start = new Date(initialSlot.startIso);
+      const end   = new Date(start.getTime() + 15 * 60_000);
+      const pad   = (n: number) => String(n).padStart(2, "0");
+      const fmt   = (d: Date) =>
+        initialSlot.timezone
+          ? d.toLocaleTimeString("es-ES", { timeZone: initialSlot.timezone, hour: "2-digit", minute: "2-digit", hour12: false })
+          : `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      return {
+        startIso:  initialSlot.startIso,
+        endIso:    end.toISOString(),
+        label:     `${fmt(start)}–${fmt(end)}`,
+        dateLabel: initialSlot.dateLabel,
+        timezone:  initialSlot.timezone,
+      };
+    }
+    return null;
+  })();
+  const supportsPreSelect = !!preSelectedSlot;
 
   // Initial week offset — navigate the calendar to the week containing the
   // pre-selected slot so the user sees it immediately.
@@ -83,7 +203,7 @@ export default function SingleSessionBooking({
 
   const [phase,          setPhase]          = useState<Phase>(supportsPreSelect ? "review" : "picking");
   const [errorMsg,       setErrorMsg]       = useState("");
-  const [selected,       setSelected]       = useState<SelectedSlot | null>(supportsPreSelect ? initialSlot! : null);
+  const [selected,       setSelected]       = useState<SelectedSlot | null>(preSelectedSlot);
   const [focusedSlot,    setFocusedSlot]    = useState<SelectedSlot | null>(null);
   const [note,           setNote]           = useState("");
   const [sessionUrl,     setSessionUrl]     = useState("");
@@ -163,38 +283,67 @@ export default function SingleSessionBooking({
   if (phase === "success") {
     return (
       <BookingLayout>
-        <WizardProgress currentStep={3} showPaymentStep={needsPaymentStep} />
-        <div className="flex items-center justify-center p-6">
-          <div className="rounded-2xl shadow-2xl p-8 sm:p-10 max-w-md w-full space-y-6" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
-            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto text-2xl" style={{ background: COLORS.brandMuted, color: COLORS.brand }} aria-hidden="true">✓</div>
-            <div className="text-center">
-              <h2 className="text-2xl font-bold" style={{ color: COLORS.textPrimary }}>¡Encuentro reservado!</h2>
-              <p className="mt-2 text-sm" style={{ color: COLORS.textSecondary }}>{selected?.dateLabel} · {selected?.label}</p>
-            </div>
+        <div className="flex items-start sm:items-center justify-center px-2 py-2 sm:py-6 sm:px-6">
+          <FeedbackCard>
+            <IconHalo tone="success" glyph="check" />
+
+            <HeaderBlock>
+              <Eyebrow tone="success">
+                {emailFailed ? "Reservada · email no enviado" : "Encuentro reservado"}
+              </Eyebrow>
+              <FbTitle>¡Tu sesión está confirmada!</FbTitle>
+              {emailFailed && (
+                <FbBody>
+                  Se ha reservado la sesión, pero{" "}
+                  <strong style={{ color: COLORS.textPrimary, fontWeight: 600 }}>
+                    no se pudo enviar el email
+                  </strong>{" "}
+                  de confirmación.
+                </FbBody>
+              )}
+            </HeaderBlock>
+
+            <EventCard
+              title={cfg.label}
+              dateLabel={selected?.dateLabel}
+              timeLabel={selected ? formatTimeRange(selected) : undefined}
+            />
 
             {emailFailed ? (
-              <div className="rounded-xl p-4 text-sm space-y-3" style={{ background: COLORS.background, border: `1px solid ${COLORS.errorBorder}` }}>
-                <p className="font-medium" style={{ color: COLORS.error }}>⚠️ No pudimos enviarte el email de confirmación</p>
-                <p style={{ color: COLORS.textSecondary }}>Tu encuentro está reservado. Accede a tu sesión aquí:</p>
-                <a href={sessionUrl} style={{ display: "block", color: COLORS.brand, textDecoration: "underline" }}>Unirse al aula virtual →</a>
-                {cancelUrl && (
-                  <a href={cancelUrl} style={{ display: "block", color: COLORS.textSecondary, textDecoration: "underline" }}>Cancelar esta reserva</a>
-                )}
-                <p style={{ color: COLORS.textMuted, fontSize: 11 }}>Si necesitas ayuda escribe a contacto@gustavoai.dev</p>
-              </div>
+              <InfoBox tone="warning">
+                <InfoRow glyph="manage_accounts" tone="warning">
+                  Puedes unirte, cancelar o reprogramar la sesión desde tu{" "}
+                  <strong style={{ color: COLORS.textPrimary, fontWeight: 600 }}>área personal</strong>.
+                  El problema con el email se resolverá a la mayor brevedad.
+                </InfoRow>
+              </InfoBox>
             ) : (
-              <div className="rounded-xl p-4 text-sm space-y-2" style={{ background: COLORS.background, border: `1px solid ${COLORS.border}` }}>
-                <p style={{ color: COLORS.textSecondary }}>📧 Revisa tu email — incluye el enlace para unirte al aula virtual y los enlaces para cancelar o reprogramar</p>
-                <p style={{ color: COLORS.textSecondary }}>📅 El email incluye un enlace para añadir el evento a tu calendario</p>
-                <p style={{ color: COLORS.textSecondary }}>👤 También puedes unirte, reprogramar o cancelar desde tu área personal en la plataforma</p>
-                <p style={{ color: COLORS.textSecondary }}>↩️ Puedes reprogramar o cancelar sin coste hasta 2 horas antes de la clase</p>
-              </div>
+              <ConfirmationChecklist />
             )}
 
-            <button onClick={onBack} className="w-full py-2.5 rounded-xl text-sm font-medium" style={{ background: COLORS.brand, color: "#0d0f10", border: "none", cursor: "pointer" }}>
-              Volver al inicio
-            </button>
-          </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <FbButton variant="primary" onClick={() => router.push("/area-personal")} style={{ width: "100%" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">login</span>
+                Ir a mi área personal
+              </FbButton>
+              <FbButton variant="ghost" onClick={onBack} style={{ width: "100%" }}>
+                Volver al inicio
+              </FbButton>
+            </div>
+
+            <Helper>
+              {emailFailed ? (
+                <>
+                  ¿Necesitas ayuda? Escribe a{" "}
+                  <a href="mailto:contacto@gustavoai.dev" style={{ color: COLORS.brand, textDecoration: "none" }}>
+                    contacto@gustavoai.dev
+                  </a>
+                </>
+              ) : (
+                "Puedes reprogramar o cancelar sin coste hasta 2 horas antes de la clase"
+              )}
+            </Helper>
+          </FeedbackCard>
         </div>
       </BookingLayout>
     );
@@ -204,13 +353,54 @@ export default function SingleSessionBooking({
   if (phase === "error") {
     return (
       <BookingLayout>
-        <WizardProgress currentStep={2} showPaymentStep={needsPaymentStep} />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
-          <div style={{ textAlign: "center", maxWidth: 380, width: "100%" }}>
-            <div style={{ width: 56, height: 56, borderRadius: "50%", margin: "0 auto 16px", background: COLORS.errorBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: COLORS.error }}>✕</div>
-            <Alert variant="error">{errorMsg}</Alert>
-            <button onClick={() => setPhase("picking")} style={{ ...primaryBtnStyle, marginTop: 16 }}>Intentar de nuevo</button>
-          </div>
+        <div className="flex items-start sm:items-center justify-center px-2 py-2 sm:py-6 sm:px-6">
+          <FeedbackCard>
+            <IconHalo tone="error" glyph="error" />
+
+            <HeaderBlock>
+              <Eyebrow tone="error">Algo salió mal</Eyebrow>
+              <FbTitle>No pudimos completar tu reserva</FbTitle>
+              <FbBody>
+                El horario sigue disponible, puedes intentarlo de nuevo.
+              </FbBody>
+            </HeaderBlock>
+
+            {selected && (
+              <EventCard
+                title={cfg.label}
+                dateLabel={selected.dateLabel}
+                timeLabel={formatTimeRange(selected)}
+                tone="error"
+              />
+            )}
+
+            <InfoBox tone="error">
+              <InfoRow glyph="info" tone="error">
+                <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.error, marginBottom: 2 }}>
+                  Lo que ocurrió
+                </div>
+                <div style={{ color: COLORS.textSecondary, lineHeight: 1.5 }}>{errorMsg}</div>
+              </InfoRow>
+            </InfoBox>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <FbButton variant="primary" onClick={() => setPhase("picking")} style={{ width: "100%" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">refresh</span>
+                Intentar de nuevo
+              </FbButton>
+              <FbButton variant="ghost" onClick={() => setPhase("picking")} style={{ width: "100%" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">arrow_back</span>
+                Elegir otro horario
+              </FbButton>
+            </div>
+
+            <Helper>
+              ¿Sigue fallando? ·{" "}
+              <a href="mailto:contacto@gustavoai.dev" style={{ color: COLORS.brand, textDecoration: "none" }}>
+                contacto@gustavoai.dev
+              </a>
+            </Helper>
+          </FeedbackCard>
         </div>
       </BookingLayout>
     );
@@ -294,9 +484,11 @@ export default function SingleSessionBooking({
                   </svg>
                 </div>
                 <div>
-                  <p className="text-sm mb-1" style={{ color: "#bbcabf" }}>Fecha y Hora Seleccionada</p>
                   <p className="text-xl font-extrabold font-headline tracking-tight" style={{ color: "#e5e1e4" }}>
-                    {selected.dateLabel} — {selected.label.split(/\s*[–\-]\s*/)[0]}
+                    {selected.dateLabel}
+                  </p>
+                  <p className="font-headline tracking-tight" style={{ color: "#4edea3", fontSize: 15, marginTop: 2 }}>
+                    {selected.label}
                   </p>
                 </div>
               </div>

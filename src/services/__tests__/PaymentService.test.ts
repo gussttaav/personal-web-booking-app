@@ -15,6 +15,7 @@ global.fetch = jest.fn().mockResolvedValue({});
 import { PaymentService } from "../PaymentService";
 import { CreditService }  from "../CreditService";
 import { BookingService } from "../BookingService";
+import { UserService }    from "../UserService";
 
 // ─── Mock factories ───────────────────────────────────────────────────────────
 
@@ -43,23 +44,33 @@ const mockBookings = (): jest.Mocked<Pick<BookingService, "createBooking">> => (
   createBooking: jest.fn(),
 });
 
+const TEST_USER_ID = "user-uuid-test-123";
+
+const mockUserService = (): jest.Mocked<Pick<UserService, "ensureUser" | "findByEmail">> => ({
+  ensureUser:   jest.fn().mockResolvedValue(TEST_USER_ID),
+  findByEmail:  jest.fn(),
+});
+
 function makeService(overrides?: {
-  stripe?:      Partial<jest.Mocked<IStripeClient>>;
-  paymentRepo?: Partial<jest.Mocked<IPaymentRepository>>;
-  credits?:     Partial<jest.Mocked<Pick<CreditService, "addCredits">>>;
-  bookings?:    Partial<jest.Mocked<Pick<BookingService, "createBooking">>>;
+  stripe?:       Partial<jest.Mocked<IStripeClient>>;
+  paymentRepo?:  Partial<jest.Mocked<IPaymentRepository>>;
+  credits?:      Partial<jest.Mocked<Pick<CreditService, "addCredits">>>;
+  bookings?:     Partial<jest.Mocked<Pick<BookingService, "createBooking">>>;
+  userService?:  Partial<jest.Mocked<Pick<UserService, "ensureUser" | "findByEmail">>>;
 }) {
-  const stripe      = { ...mockStripe(),      ...overrides?.stripe };
-  const paymentRepo = { ...mockPaymentRepo(), ...overrides?.paymentRepo };
-  const credits     = { ...mockCredits(),     ...overrides?.credits };
-  const bookings    = { ...mockBookings(),     ...overrides?.bookings };
+  const stripe      = { ...mockStripe(),       ...overrides?.stripe };
+  const paymentRepo = { ...mockPaymentRepo(),  ...overrides?.paymentRepo };
+  const credits     = { ...mockCredits(),      ...overrides?.credits };
+  const bookings    = { ...mockBookings(),      ...overrides?.bookings };
+  const userSvc     = { ...mockUserService(),  ...overrides?.userService };
   const service = new PaymentService(
     stripe as jest.Mocked<IStripeClient>,
     credits as unknown as CreditService,
     bookings as unknown as BookingService,
     paymentRepo,
+    userSvc as unknown as UserService,
   );
-  return { service, stripe, paymentRepo, credits, bookings };
+  return { service, stripe, paymentRepo, credits, bookings, userSvc };
 }
 
 // ─── Helpers for fake Stripe events ──────────────────────────────────────────
@@ -219,7 +230,7 @@ describe("PaymentService.processWebhookEvent — single session", () => {
 
     expect(paymentRepo.recordFailedBooking).toHaveBeenCalledWith(expect.objectContaining({
       stripeSessionId: "pi_single_123",
-      email:           "student@test.com",
+      userId:          TEST_USER_ID,
     }));
     expect(paymentRepo.markProcessed).not.toHaveBeenCalled();
   });
@@ -235,7 +246,7 @@ describe("PaymentService.reprocessFailedBooking", () => {
 
   const deadLetterEntry: FailedBookingEntry = {
     stripeSessionId: "pi_single_123",
-    email:           "student@test.com",
+    userId:          TEST_USER_ID,
     startIso:        "2099-12-01T10:00:00.000Z",
     failedAt:        "2099-11-30T00:00:00.000Z",
     error:           "calendar API down",

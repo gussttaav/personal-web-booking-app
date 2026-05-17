@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * AvailabilityModal — unauthenticated availability preview
+ * AvailabilityModal — availability preview
  *
  * Shows an 8-column time-grid calendar (time markers + 7 day columns) of
  * 1-hour slots fetched from /api/availability (no auth required). On slot
- * selection, presents a session-type picker with a sticky CTA footer.
- * Calls onSessionSelected only when the user explicitly confirms.
+ * selection, immediately invokes onSlotSelected and closes — the caller
+ * decides which booking surface to open based on user state.
  *
  * Layout:
  *   - Mobile  (< 640px): bottom sheet, all 7 days visible, no horizontal scroll
@@ -16,18 +16,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { SCHEDULE, DAY_SCHEDULES, dayStartHour } from "@/lib/booking-config";
 import type { ApiSlot, SelectedSlot } from "@/components/WeeklyCalendar";
-import SessionPickerContent, { type SessionChoice, SESSION_OPTIONS, PACK_OPTIONS } from "@/components/SessionPickerContent";
-
-// Re-export so existing consumers (InteractiveShell) keep their import unchanged
-export type { SessionChoice } from "@/components/SessionPickerContent";
 
 interface AvailabilityModalProps {
-  onClose: () => void;
-  onSessionSelected: (choice: SessionChoice, slot: SelectedSlot) => void;
-  /** Whether the user is currently signed in */
-  isSignedIn: boolean;
-  /** Pack size the user already has credits for (null = no active pack) */
-  activePackSize: 5 | 10 | null;
+  onClose:        () => void;
+  onSlotSelected: (slot: SelectedSlot) => void;
 }
 
 // ─── Internal types ────────────────────────────────────────────────────────────
@@ -136,13 +128,8 @@ function formatHourLabel(hour: number): string {
 
 export default function AvailabilityModal({
   onClose,
-  onSessionSelected,
-  isSignedIn,
-  activePackSize,
+  onSlotSelected,
 }: AvailabilityModalProps) {
-  const [view,           setView]           = useState<"calendar" | "picker">("calendar");
-  const [selectedSlot,   setSelectedSlot]   = useState<SelectedSlot | null>(null);
-  const [selectedChoice, setSelectedChoice] = useState<SessionChoice | null>(null);
   const [weekOffset,     setWeekOffset]     = useState(0);
   const [slotsMap,       setSlotsMap]       = useState<Record<string, DaySlots>>({});
   const [userTz,         setUserTz]         = useState<string>(SCHEDULE.timezone);
@@ -241,31 +228,12 @@ export default function AvailabilityModal({
   });
 
   const handleSlotClick = useCallback((date: Date, slot: ApiSlot) => {
-    setSelectedSlot(buildSelectedSlot(date, slot, userTz));
-    setSelectedChoice(null);
-    setView("picker");
-  }, [userTz]);
-
-  const handleBackToCalendar = () => {
-    setView("calendar");
-    setSelectedSlot(null);
-    setSelectedChoice(null);
-  };
-
-  const handleConfirm = useCallback(() => {
-    if (!selectedSlot || !selectedChoice) return;
-    onSessionSelected(selectedChoice, selectedSlot);
+    onSlotSelected(buildSelectedSlot(date, slot, userTz));
     onClose();
-  }, [selectedSlot, selectedChoice, onSessionSelected, onClose]);
+  }, [userTz, onSlotSelected, onClose]);
 
   const today   = new Date(); today.setHours(0, 0, 0, 0);
   const maxDate = new Date(); maxDate.setDate(maxDate.getDate() + SCHEDULE.bookingWindowWeeks * 7);
-
-  function ctaLabel(choice: SessionChoice): string {
-    if (choice.kind === "session") return "Reservar →";
-    if (isSignedIn && activePackSize === choice.size) return "Reservar →";
-    return "Comprar pack →";
-  }
 
   // ── Time indicator ───────────────────────────────────────────────────────
   const ROW_H_VAL    = isMobile ? 40 : 48;
@@ -339,63 +307,36 @@ export default function AvailabilityModal({
               gap:            12,
             }}
           >
-            {view === "picker" ? (
-              <button
-                onClick={handleBackToCalendar}
-                style={{
-                  display:    "flex",
-                  alignItems: "center",
-                  gap:        6,
-                  background: "none",
-                  border:     "none",
-                  cursor:     "pointer",
-                  color:      "#bbcabf",
-                  fontFamily: "inherit",
-                  fontSize:   13,
-                  fontWeight: 500,
-                  padding:    0,
-                }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#e5e1e4"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#bbcabf"; }}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: 20, color: "#4edea3", flexShrink: 0, lineHeight: 1 }}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-                  <polyline points="15 18 9 12 15 6" />
-                </svg>
-                Cambiar horario
-              </button>
-            ) : (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
-                <span
-                  className="material-symbols-outlined"
-                  style={{ fontSize: 20, color: "#4edea3", flexShrink: 0, lineHeight: 1 }}
-                >
-                  event_note
-                </span>
-                <div style={{ minWidth: 0 }}>
-                  <p style={{
-                    fontFamily:    "var(--font-headline, Manrope), sans-serif",
-                    fontSize:      isMobile ? 15 : 17,
-                    fontWeight:    700,
-                    color:         "#e5e1e4",
-                    letterSpacing: "-0.01em",
-                    margin:        0,
-                    lineHeight:    1.2,
-                  }}>
-                    {formatWeekHeading(weekStart)}
-                  </p>
-                  <p style={{ fontSize: 11, color: "#86948a", margin: "2px 0 0" }}>
-                    {tzDiffers
-                      ? `Horarios en tu zona · ${userTz}`
-                      : `Horarios en ${SCHEDULE.timezone}`}
-                  </p>
-                </div>
+                event_note
+              </span>
+              <div style={{ minWidth: 0 }}>
+                <p style={{
+                  fontFamily:    "var(--font-headline, Manrope), sans-serif",
+                  fontSize:      isMobile ? 15 : 17,
+                  fontWeight:    700,
+                  color:         "#e5e1e4",
+                  letterSpacing: "-0.01em",
+                  margin:        0,
+                  lineHeight:    1.2,
+                }}>
+                  {formatWeekHeading(weekStart)}
+                </p>
+                <p style={{ fontSize: 11, color: "#86948a", margin: "2px 0 0" }}>
+                  {tzDiffers
+                    ? `Horarios en tu zona · ${userTz}`
+                    : `Horarios en ${SCHEDULE.timezone}`}
+                </p>
               </div>
-            )}
+            </div>
 
             {/* Right side controls */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-              {view === "calendar" && (
-                <div style={{
+              <div style={{
                   display:      "flex",
                   alignItems:   "center",
                   background:   "#0e0e10",
@@ -452,8 +393,7 @@ export default function AvailabilityModal({
                       <polyline points="9 18 15 12 9 6" />
                     </svg>
                   </button>
-                </div>
-              )}
+              </div>
 
               <button
                 onClick={onClose}
@@ -484,12 +424,10 @@ export default function AvailabilityModal({
           {/* ── Scrollable body ── */}
           <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
 
-            {view === "calendar" ? (
-              <>
-                {/*
-                  8-column time grid.
-                  The wrapper's background + columnGap create 1px column separators.
-                */}
+            {/*
+              8-column time grid.
+              The wrapper's background + columnGap create 1px column separators.
+            */}
                 <div
                   style={{
                     display:             "grid",
@@ -592,19 +530,6 @@ export default function AvailabilityModal({
                     No disponible
                   </span>
                 </div>
-              </>
-            ) : (
-              <SessionPickerContent
-                slot={selectedSlot ?? undefined}
-                isMobile={isMobile}
-                isSignedIn={isSignedIn}
-                activePackSize={activePackSize}
-                selectedChoice={selectedChoice}
-                onSelect={setSelectedChoice}
-                ctaLabel={ctaLabel}
-                onConfirm={handleConfirm}
-              />
-            )}
           </div>
         </div>
       </div>

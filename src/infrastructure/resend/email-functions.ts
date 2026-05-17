@@ -29,12 +29,20 @@ function escapeHtml(str: string): string {
 
 // ─── Internal send ────────────────────────────────────────────────────────────
 
-async function send(payload: { to: string; subject: string; html: string }): Promise<void> {
-  // Skip outbound email entirely under E2E_MODE so Playwright runs don't consume
-  // the Resend daily quota. Tests don't assert on email delivery — they use the
-  // in-app success states and (for cancel-link flows) a token from the API.
-  if (process.env.E2E_MODE === "true") {
-    console.info(`[email] E2E_MODE — skipped send to ${payload.to}`);
+async function send(
+  payload: { to: string; subject: string; html: string },
+  studentEmail?: string,
+): Promise<void> {
+  // Skip when the recipient or the booking's student is a known E2E test
+  // account, so Playwright runs don't consume the Resend daily quota.
+  // Real users on the same deployment (manual smoke-tests on staging) still
+  // receive emails.
+  const testAccounts = (process.env.E2E_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean);
+  if (testAccounts.includes(payload.to) || (studentEmail && testAccounts.includes(studentEmail))) {
+    console.info(`[email] test booking — skipped send to ${payload.to}`);
     return;
   }
 
@@ -273,7 +281,44 @@ export async function sendCancellationNotificationEmail(params: {
         <p>Gestiona el reembolso manualmente si procede.</p>
       </div></div></body></html>
     `,
-  });
+  }, params.studentEmail);
+}
+
+// ─── Dead-letter failure notification (Gustavo) ──────────────────────────────
+
+export async function sendDeadLetterNotificationEmail(params: {
+  studentEmail: string;
+  stripeSessionId: string;
+  userId: string;
+  startIso: string;
+  error: string;
+}): Promise<void> {
+  const notifyEmail = process.env.NOTIFY_EMAIL;
+  if (!notifyEmail) return;
+
+  const safeSessionId = escapeHtml(params.stripeSessionId);
+  const safeUserId    = escapeHtml(params.userId);
+  const safeStartIso  = escapeHtml(params.startIso);
+  const safeError     = escapeHtml(params.error);
+
+  await send({
+    to: notifyEmail,
+    subject: `⚠️ Reserva fallida — acción manual requerida`,
+    html: `
+      <html><head><style>${STYLES}</style></head><body>
+      <div class="wrap"><div class="card">
+        <h1>Reserva fallida</h1>
+        <p>No se pudo crear el evento de calendario para la reserva <strong>${safeSessionId}</strong>.</p>
+        <div class="label">Usuario</div>
+        <div class="value">${safeUserId}</div>
+        <div class="label">Slot</div>
+        <div class="value">${safeStartIso}</div>
+        <div class="label">Error</div>
+        <div class="note-box"><p>${safeError}</p></div>
+        <p>El alumno ha pagado. Gestiona el reembolso o crea el evento manualmente.</p>
+      </div></div></body></html>
+    `,
+  }, params.studentEmail);
 }
 
 // ─── New booking notification (Gustavo) ───────────────────────────────────────
@@ -317,5 +362,5 @@ export async function sendNewBookingNotificationEmail(params: {
         </div>
       </div></div></body></html>
     `,
-  });
+  }, params.studentEmail);
 }

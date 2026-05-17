@@ -26,6 +26,7 @@ const mockBookings = (): jest.Mocked<IBookingRepository> => ({
   findByJoinToken:         jest.fn().mockResolvedValue(null),
   consumeCancelToken:      jest.fn().mockResolvedValue(true),
   listByUser:              jest.fn().mockResolvedValue([]),
+  hasAnyBooking:           jest.fn().mockResolvedValue(false),
   acquireSlotLock:         jest.fn().mockResolvedValue(true),
   releaseSlotLock:         jest.fn().mockResolvedValue(undefined),
   recordRescheduleFailure: jest.fn().mockResolvedValue(undefined),
@@ -420,5 +421,26 @@ describe("BookingService.listForUser", () => {
     const service = makeService();
     const result = await service.listForUser("nobody@test.com");
     expect(result).toEqual([]);
+  });
+});
+
+// ─── hasAnyBooking ────────────────────────────────────────────────────────────
+
+describe("BookingService.hasAnyBooking", () => {
+  it("delegates to the repository", async () => {
+    const bookings = mockBookings();
+    bookings.hasAnyBooking.mockResolvedValue(true);
+    const service = makeService({ bookings });
+
+    const result = await service.hasAnyBooking("s@t.com");
+
+    expect(bookings.hasAnyBooking).toHaveBeenCalledWith("s@t.com");
+    expect(result).toBe(true);
+  });
+
+  it("returns false when the repository reports no bookings", async () => {
+    const service = makeService();
+    const result = await service.hasAnyBooking("nobody@test.com");
+    expect(result).toBe(false);
   });
 });

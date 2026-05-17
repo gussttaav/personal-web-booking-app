@@ -1,76 +1,72 @@
 # TEST-02: E2E tests with Playwright
 #
-# ── Two operating modes ──────────────────────────────────────────────────────
+# Triggered by a successful Vercel deployment of the `staging` branch.
+# Vercel's GitHub integration fires `deployment_status` for every preview
+# deployment (feature branches and staging alike) and the event itself
+# doesn't carry the branch name — `deployment.ref` is the commit SHA,
+# `environment` is just "Preview", and `environment_url` is the auto-
+# generated *.vercel.app URL (not the custom domain). So the `check-staging`
+# job resolves the SHA → branch via the GitHub API, and only when the SHA
+# is currently the HEAD of the `staging` branch does the `e2e` job run.
 #
-#   LOCAL SERVER MODE  (E2E_BASE_URL secret is NOT set)
-#     - playwright.config.ts starts `npm run dev` automatically (webServer)
-#     - Stripe CLI is installed; `stripe listen --print-secret` captures the
-#       webhook signing secret dynamically and writes it to STRIPE_WEBHOOK_SECRET
-#       in the job environment — no need to store it as a GitHub secret
-#     - Required GitHub secrets: STRIPE_SECRET_KEY_TEST (your sk_test_... key)
+# App-level env vars (AUTH_SECRET, STRIPE_*, UPSTASH_*, ZOOM_*, etc.) are
+# already present in the Vercel staging environment — they do NOT need to
+# be passed from GitHub Actions. Only the secrets the test runner itself
+# uses are listed here.
 #
-#   VERCEL PREVIEW MODE  (E2E_BASE_URL secret IS set)
-#     - Tests run against an already-deployed Vercel preview URL
-#     - Stripe sends webhooks directly to <preview-url>/api/stripe/webhook;
-#       no CLI forwarding needed
-#     - Required GitHub secrets: STRIPE_WEBHOOK_SECRET_TEST (the whsec_... from
-#       the webhook endpoint you registered in the Stripe dashboard for that URL)
+# ── Required GitHub secrets ───────────────────────────────────────────────────
 #
-#   ── To enable Vercel preview mode ───────────────────────────────────────────
-#   Currently NOT active (E2E_BASE_URL is unset → local server mode is used).
-#   To switch, do all four steps:
-#     1. In Vercel dashboard: ensure the preview deployment runs BEFORE this job
-#        (add a `needs: deploy` dependency or use a separate workflow triggered
-#        by the Vercel deployment webhook).
-#     2. In Stripe dashboard: create a webhook endpoint pointing to
-#        https://<your-preview-domain>/api/stripe/webhook, copy the whsec_...
-#     3. Add GitHub secret E2E_BASE_URL = https://<your-preview-domain>
-#     4. Add GitHub secret STRIPE_WEBHOOK_SECRET_TEST = whsec_... (from step 2)
-#        and remove STRIPE_SECRET_KEY_TEST (no longer needed without the CLI)
-#   ────────────────────────────────────────────────────────────────────────────
+#   E2E_BASE_URL
+#   SUPABASE_URL_TEST             https://<ref>.supabase.co
+#   SUPABASE_SERVICE_ROLE_KEY_TEST
+#   SUPABASE_DB_URL_TEST          (postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres)
+#                                 Settings → Database → Connection pooling → Session mode
+#   GOOGLE_CALENDAR_ID            test calendar (not the production one)
+#   GOOGLE_SERVICE_ACCOUNT_EMAIL
+#   GOOGLE_PRIVATE_KEY
 #
-# ── Full list of required GitHub secrets ─────────────────────────────────────
+# ── Vercel staging env vars (set in Vercel dashboard, not here) ───────────────
 #
-#   Always required:
-#     AUTH_SECRET, E2E_EMAILS
-#     GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
-#     GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY, GOOGLE_CALENDAR_ID
-#     STRIPE_SECRET_KEY_TEST        (sk_test_... — used by the app)
-#     STRIPE_PUBLISHABLE_KEY_TEST   (pk_test_... — used by Stripe.js in the browser)
-#     STRIPE_PRICE_ID_PACK5, STRIPE_PRICE_ID_PACK10
-#     STRIPE_PRICE_ID_SESSION_1H, STRIPE_PRICE_ID_SESSION_2H
-#     UPSTASH_REDIS_REST_URL_TEST, UPSTASH_REDIS_REST_TOKEN_TEST
-#     RESEND_API_KEY
-#     ZOOM_VIDEO_SDK_KEY, ZOOM_VIDEO_SDK_SECRET
-#     NEXT_PUBLIC_BASE_URL_TEST, CANCEL_SECRET
-#     GEMINI_API_KEY, TUTOR_EMAIL
-#     QSTASH_TOKEN, QSTASH_CURRENT_SIGNING_KEY, QSTASH_NEXT_SIGNING_KEY
-#     ADMIN_EMAILS
-#     SUPABASE_URL_TEST, SUPABASE_SERVICE_ROLE_KEY_TEST
-#     SUPABASE_DB_URL_TEST          (postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres)
-#                                   Settings → Database → Connection pooling → Session mode
-#                                   (session-mode pooler — IPv4, supports DDL migrations)
-#
-#   Local server mode only:
-#     STRIPE_SECRET_KEY_TEST           (sk_test_... — used by the Stripe CLI)
-#
-#   Vercel preview mode only:
-#     E2E_BASE_URL                  (https://your-preview.vercel.app)
-#     STRIPE_WEBHOOK_SECRET_TEST    (whsec_... from Stripe dashboard endpoint)
+#   E2E_MODE=true, E2E_EMAILS, AUTH_SECRET
+#   STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_WEBHOOK_SECRET
+#   STRIPE_PRICE_ID_PACK5, STRIPE_PRICE_ID_PACK10
+#   STRIPE_PRICE_ID_SESSION_1H, STRIPE_PRICE_ID_SESSION_2H
+#   UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+#   RESEND_API_KEY, ZOOM_VIDEO_SDK_KEY, ZOOM_VIDEO_SDK_SECRET
+#   NEXT_PUBLIC_BASE_URL, CANCEL_SECRET, GEMINI_API_KEY, TUTOR_EMAIL
+#   QSTASH_URL, QSTASH_TOKEN, QSTASH_CURRENT_SIGNING_KEY, QSTASH_NEXT_SIGNING_KEY
+#   ADMIN_EMAILS, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
 
 name: E2E tests
 
 on:
-  pull_request:
-  push:
-    branches: [main]
+  deployment_status:
 
 jobs:
+  check-staging:
+    if: >
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment_status.environment == 'Preview'
+    runs-on: ubuntu-latest
+    outputs:
+      is_staging: ${{ steps.check.outputs.is_staging }}
+    steps:
+      - name: Resolve deployed SHA to branch
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          IS_STAGING=$(gh api \
+            "repos/${{ github.repository }}/commits/${{ github.event.deployment.sha }}/branches-where-head" \
+            --jq 'any(.name == "staging")')
+          echo "is_staging=$IS_STAGING" >> "$GITHUB_OUTPUT"
+          echo "deployed SHA ${{ github.event.deployment.sha }} → staging HEAD? $IS_STAGING"
+
   e2e:
+    needs: check-staging
+    if: needs.check-staging.outputs.is_staging == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
 
     steps:
       - uses: actions/checkout@v4
@@ -94,90 +90,16 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      # ── Local server mode only ──────────────────────────────────────────────
-      # Install the Stripe CLI so we can forward webhook events to the local
-      # dev server started by playwright.config.ts webServer.
-
-      - name: Install Stripe CLI
-        if: ${{ !env.E2E_BASE_URL }}
-        run: |
-          curl -s https://packages.stripe.dev/api/security/keypair/stripe-cli-gpg/public \
-            | gpg --dearmor \
-            | sudo tee /usr/share/keyrings/stripe.gpg > /dev/null
-          echo "deb [signed-by=/usr/share/keyrings/stripe.gpg] \
-            https://packages.stripe.dev/stripe-cli-debian-local stable main" \
-            | sudo tee /etc/apt/sources.list.d/stripe.list
-          sudo apt-get update -q && sudo apt-get install -y stripe
-
-      # Capture the webhook signing secret that stripe listen will use.
-      # --print-secret outputs the whsec_... value and exits without opening
-      # a listener — the same secret is then used when the real listener starts.
-      # Writing to GITHUB_ENV makes STRIPE_WEBHOOK_SECRET available to all
-      # subsequent steps in this job, so the app can verify webhook payloads.
-      - name: Capture Stripe webhook signing secret
-        if: ${{ !env.E2E_BASE_URL }}
-        run: |
-          SECRET=$(stripe listen --print-secret --api-key "${{ secrets.STRIPE_SECRET_KEY_TEST }}")
-          echo "STRIPE_WEBHOOK_SECRET=$SECRET" >> "$GITHUB_ENV"
-
-      - name: Start Stripe webhook listener
-        if: ${{ !env.E2E_BASE_URL }}
-        run: |
-          stripe listen \
-            --api-key "${{ secrets.STRIPE_SECRET_KEY_TEST }}" \
-            --forward-to localhost:3000/api/stripe/webhook &
-          echo "STRIPE_LISTENER_PID=$!" >> "$GITHUB_ENV"
-
-      # ── Run tests ───────────────────────────────────────────────────────────
-
       - name: Run E2E tests
         run: npx playwright test
         env:
-          E2E_MODE:     "true"
-          E2E_EMAILS:   ${{ secrets.E2E_EMAILS }}
-          E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
-
-          # Local server mode: STRIPE_WEBHOOK_SECRET was written to GITHUB_ENV
-          #   by the "Capture Stripe webhook signing secret" step above.
-          # Vercel preview mode: STRIPE_WEBHOOK_SECRET_TEST holds the whsec_...
-          #   from the Stripe dashboard endpoint registered for the preview domain.
-          STRIPE_WEBHOOK_SECRET: ${{ env.STRIPE_WEBHOOK_SECRET || secrets.STRIPE_WEBHOOK_SECRET_TEST }}
-
-          AUTH_SECRET:                   ${{ secrets.AUTH_SECRET }}
-          GOOGLE_CLIENT_ID:              ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET:          ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_SERVICE_ACCOUNT_EMAIL:  ${{ secrets.GOOGLE_SERVICE_ACCOUNT_EMAIL }}
-          GOOGLE_PRIVATE_KEY:            ${{ secrets.GOOGLE_PRIVATE_KEY }}
-          GOOGLE_CALENDAR_ID:            ${{ secrets.GOOGLE_CALENDAR_ID }}
-          STRIPE_SECRET_KEY:                  ${{ secrets.STRIPE_SECRET_KEY_TEST }}
-          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY_TEST }}
-          STRIPE_PRICE_ID_PACK5:         ${{ secrets.STRIPE_PRICE_ID_PACK5 }}
-          STRIPE_PRICE_ID_PACK10:        ${{ secrets.STRIPE_PRICE_ID_PACK10 }}
-          STRIPE_PRICE_ID_SESSION_1H:    ${{ secrets.STRIPE_PRICE_ID_SESSION_1H }}
-          STRIPE_PRICE_ID_SESSION_2H:    ${{ secrets.STRIPE_PRICE_ID_SESSION_2H }}
-          UPSTASH_REDIS_REST_URL:        ${{ secrets.UPSTASH_REDIS_REST_URL_TEST }}
-          UPSTASH_REDIS_REST_TOKEN:      ${{ secrets.UPSTASH_REDIS_REST_TOKEN_TEST }}
-          RESEND_API_KEY:                ${{ secrets.RESEND_API_KEY }}
-          ZOOM_VIDEO_SDK_KEY:            ${{ secrets.ZOOM_VIDEO_SDK_KEY }}
-          ZOOM_VIDEO_SDK_SECRET:         ${{ secrets.ZOOM_VIDEO_SDK_SECRET }}
-          NEXT_PUBLIC_BASE_URL:          ${{ secrets.NEXT_PUBLIC_BASE_URL_TEST }}
-          CANCEL_SECRET:                 ${{ secrets.CANCEL_SECRET }}
-          GEMINI_API_KEY:                ${{ secrets.GEMINI_API_KEY }}
-          TUTOR_EMAIL:                   ${{ secrets.TUTOR_EMAIL }}
-          QSTASH_URL:                    ${{ secrets.QSTASH_URL }}
-          QSTASH_TOKEN:                  ${{ secrets.QSTASH_TOKEN }}
-          QSTASH_CURRENT_SIGNING_KEY:    ${{ secrets.QSTASH_CURRENT_SIGNING_KEY }}
-          QSTASH_NEXT_SIGNING_KEY:       ${{ secrets.QSTASH_NEXT_SIGNING_KEY }}
-          ADMIN_EMAILS:                  ${{ secrets.ADMIN_EMAILS }}
-          SUPABASE_URL:                  ${{ secrets.SUPABASE_URL_TEST }}
-          SUPABASE_SERVICE_ROLE_KEY:     ${{ secrets.SUPABASE_SERVICE_ROLE_KEY_TEST }}
-          SUPABASE_DB_URL:               ${{ secrets.SUPABASE_DB_URL_TEST }}
-
-      # ── Cleanup ─────────────────────────────────────────────────────────────
-
-      - name: Stop Stripe webhook listener
-        if: always() && env.STRIPE_LISTENER_PID != ''
-        run: kill "$STRIPE_LISTENER_PID" || true
+          E2E_BASE_URL:          ${{ secrets.E2E_BASE_URL }}
+          SUPABASE_URL:          ${{ secrets.SUPABASE_URL_TEST }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY_TEST }}
+          SUPABASE_DB_URL:       ${{ secrets.SUPABASE_DB_URL_TEST }}
+          GOOGLE_CALENDAR_ID:    ${{ secrets.GOOGLE_CALENDAR_ID }}
+          GOOGLE_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_EMAIL }}
+          GOOGLE_PRIVATE_KEY:    ${{ secrets.GOOGLE_PRIVATE_KEY }}
 
       - name: Upload test artifacts on failure
         if: failure()
